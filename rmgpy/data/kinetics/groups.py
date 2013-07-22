@@ -120,7 +120,12 @@ class KineticsGroups(Database):
 
         # Descend reactant trees as far as possible
         template = []
+        #these two variables are for keeping track of which groups have been matched to a entries 
+        #in the forward template. They are used to fix a bug if more matches are found than expected. 
+        checkMatrix=[]
+        count=1
         for entry in forwardTemplate:
+
             # entry is a top-level node that should be matched
             group = entry.item
 
@@ -132,32 +137,84 @@ class KineticsGroups(Database):
                 group = entry.item.getPossibleStructures(self.entries)[0]
 
             atomList = group.getLabeledAtoms() # list of atom labels in highest non-union node
-
+            
+            #another variable to fix multiple match bug
+            checkList=[]
+            
             for reactant in reaction.reactants:
                 if isinstance(reactant, Species):
                     reactant = reactant.molecule[0]
                 # Match labeled atoms
                 # Check this reactant has each of the atom labels in this group
+                if isinstance(reactant, LogicNode):
+                    reactant = reactant.getPossibleStructures(self.entries)[0]
+                
                 if not all([reactant.containsLabeledAtom(label) for label in atomList]):
+                    checkList.append(0)
                     continue # don't try to match this structure - the atoms aren't there!
                 # Match structures
                 atoms = reactant.getLabeledAtoms()
                 matched_node = self.descendTree(reactant, atoms, root=entry)
                 if matched_node is not None:
                     template.append(matched_node)
-                #else:
-                #    logging.warning("Couldn't find match for {0} in {1}".format(entry,atomList))
-                #    logging.warning(reactant.toAdjacencyList())
+                    checkList.append(count)
+                    count+=1
+                else:
+                    checkList.append(0)
+                    #    logging.warning("Couldn't find match for {0} in {1}".format(entry,atomList))
+                    #    logging.warning(reactant.toAdjacencyList())
+            else:
+                checkMatrix.append(checkList)                    
 
         # Get fresh templates (with duplicate nodes back in)
         forwardTemplate = self.top[:]
         if self.label.lower().startswith('r_recombination'):
             forwardTemplate.append(forwardTemplate[0])
+            return template
 
         # Check that we were able to match the template.
         # template is a list of the actual matched nodes
         # forwardTemplate is a list of the top level nodes that should be matched
-        if len(template) != len(forwardTemplate):
+        
+        #normalize the matrix for easier analysis
+        normalizedMatrix=[]
+        for row in checkMatrix:
+            newRow=[]
+            for element in row:
+                if element==0:
+                    newRow.append(0)
+                else: 
+                    newRow.append(1)
+            normalizedMatrix.append(newRow)
+        
+#         if len(template) != len(forwardTemplate):
+        """We expect the matrix to have each row possess only one match. This would mean that each
+        molecule matches one of each template. If not, some cases may just have redundant matches, which
+        we can attempt to clean up before giving an error."""
+        if not all(sum(row)==1 for row in normalizedMatrix):
+            if len(template) > len(reaction.reactants):
+                        
+                #iterate trying to remove faulty matches
+                for iteration in range(len(checkMatrix)-1):
+                    for row in normalizedMatrix:
+                        if sum(row)==1:
+                            rowIndex1=normalizedMatrix.index(row)
+                            columnIndex=row.index(1)
+                            for rowIndex2, ModifiedRow in enumerate(normalizedMatrix):
+                                if rowIndex1!=rowIndex2:
+                                    ModifiedRow[columnIndex]=0
+                
+                if all(sum(row)==1 for row in normalizedMatrix):
+                    #get the correct matches
+                    correctMatchIndexList=[]
+                    
+                    for rowIndex, row in enumerate(normalizedMatrix):
+                        for columnIndex, element in enumerate(row):
+                            if element!=0:
+                                #subtract 1 to get back to correct python indexing
+                                correctMatchIndexList.append(checkMatrix[rowIndex][columnIndex]-1)
+                    newTemplate=[template[matchIndex] for matchIndex in correctMatchIndexList]
+                    return newTemplate            
             #logging.warning('Unable to find matching template for reaction {0} in reaction family {1}'.format(str(reaction), str(self)) )
             #logging.warning(" Trying to match " + str(forwardTemplate))
             #logging.warning(" Matched "+str(template))
