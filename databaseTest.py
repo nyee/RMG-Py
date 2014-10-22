@@ -12,6 +12,7 @@ from rmgpy.molecule import Group
 
 import nose
 import nose.tools
+import itertools
 
 
 class TestDatabase():  # cannot inherit from unittest.TestCase if we want to use nose test generators
@@ -57,6 +58,12 @@ class TestDatabase():  # cannot inherit from unittest.TestCase if we want to use
 
             test = lambda x: self.kinetics_checkChildParentRelationships(family_name)
             test_name = "Kinetics family {0}: parent-child relationships are correct?".format(family_name)
+            test.description = test_name
+            self.compat_func_name = test_name
+            yield test, family_name
+            
+            test = lambda x: self.kinetics_CheckSiblingOverlapping(family_name)
+            test_name = "Kinetics family {0}: siblings are erroneously overlapping?".format(family_name)
             test.description = test_name
             self.compat_func_name = test_name
             yield test, family_name
@@ -265,6 +272,85 @@ class TestDatabase():  # cannot inherit from unittest.TestCase if we want to use
                     
                     nose.tools.assert_false(speciesList[i].molecule[0].isIsomorphic(speciesList[j].molecule[0], initialMap), "Species {0} and species {1} in {2} database were found to be identical.".format(speciesList[i].label,speciesList[j].label,database.label))
 
+    def kinetics_CheckSiblingOverlapping(self, family_name):
+        from rmgpy.data.base import Database
+        """
+        This function should return fullChildList, a list of children which are all Groups instead 
+        of LogicOrs. If a direct child is a LogicOr, it will recursively extend the fullChildList until
+        it reaches a level where all are Groups.
+        """
+        def getChildrenThatAreGroups(node):
+            if isinstance(node.item, LogicOr):
+                fullChildList=[]
+                for child in node.children:
+                    fullChildList.extend(getChildrenThatAreGroups(child))
+                return fullChildList
+            else:
+                return [node]
+        
+        def getFullSiblingList(siblingList):
+            fullSiblingList=[]
+            for node in siblingList:
+                fullSiblingList.extend(getChildrenThatAreGroups(node))
+            return fullSiblingList
+        
+        originalFamily = self.database.kinetics.families[family_name]
+        family = Database()
+        family.entries = originalFamily.groups.entries
+        #This is a list of checkedNodes so that we don't do a lot of duplicate checking
+        nodesChecked=[]
+        for nodeName, childNode in family.entries.iteritems():
+            if childNode in nodesChecked: continue
+            #top nodes can allow overlapping or even identical definitions (e.g. R recombination), so they get an automatic pass
+            #We also do not need to check products or their children, so these also get an automatic pass
+            if childNode in originalFamily.groups.top or childNode in originalFamily.forwardTemplate.products or childNode.parent in originalFamily.forwardTemplate.products: continue
+            #siblings are all 
+            parentNode = childNode.parent
+            siblingList=getFullSiblingList(parentNode.children)
+            nodesChecked.extend(siblingList)
+                        
+            for sibling1 in siblingList:
+                #Create a shallow copy of siblingList which will be modified over this iteration
+                siblingListCopy=copy(siblingList)
+                siblingListCopy.remove(sibling1)
+                #First check if each labeled atom overlaps. If not, we do not have to do the much more expensive test below:
+                labeledAtoms1=sibling1.item.getLabeledAtoms()
+                for sibling2 in siblingList:
+                    labeledAtoms2=sibling2.item.getLabeledAtoms()
+                    #Flag if one labeled atom does not share overlap, that we can stop checking this molecule
+                    siblingPasses=False
+                    for key, groupAtoms1 in labeledAtoms1.iteritems():
+                        if siblingPasses: break
+                        #list of booleans checking every combination of atom groupAtoms for each labeledAtom
+                        atom1InAtom2=[]
+                        for groupAtom1 in groupAtoms1.atomType:
+                            atom1InAtom2.append(groupAtom1 in labeledAtoms2[key].atomType)
+                            for groupAtom2 in labeledAtoms2[key].atomType:
+                                atom1InAtom2.append(groupAtom1 in groupAtom2.specific)
+                        #If there is not a single true in atom1InAtom2, then there is no overlap and we can stop checking sibling2
+                        if not True in atom1InAtom2:
+                            siblingListCopy.remove(sibling2)
+                            siblingPasses=True
+                            break
+
+                #Now we will actually check every permutation of sibling1 to see if it overlaps with sibling2
+                #make a list of each possible atomType for each atom in the sibling1
+                atomTypesPerAtom=[sibling1.item.atoms[index].atomType for index in range(len(sibling1.item.atoms))]
+                #create iterable to give all permutations of atomTypes
+                atomTypePermutations=itertools.product(*atomTypesPerAtom)
+                #Flag to stop if an overlap is found
+                overlapFound=[]
+                #Check if any permutation is a child of a sibling
+                for atomPermutation in atomTypePermutations:
+                    copyNode=deepcopy(sibling1)
+                    for index, atom in enumerate(copyNode.item.atoms):
+                        atom.atomType=[atomPermutation[index]]
+                    for sibling2 in siblingListCopy:
+                        if sibling2 in overlapFound: continue
+                        elif family.matchNodeToChild(sibling2,copyNode):
+                            print "In {family} family, group {sibling} overlaps with {child}.".format(family=family_name, sibling=sibling2.label, child=sibling1.label)
+                            overlapFound.append(sibling2)
+                        
     def general_checkNodesFoundInTree(self, group_name, group):
         """
         This test checks whether nodes are found in the tree, with proper parents.
@@ -316,5 +402,7 @@ class TestDatabase():  # cannot inherit from unittest.TestCase if we want to use
                 if isinstance(ancestorNode, Group):
                     nose.tools.assert_true(group.matchNodeToChild(ancestorNode, childNode),
                                     "In {group} group, node {ancestor} is not a proper ancestor of its child {child}.".format(group=group_name, ancestor=ancestorNode, child=nodeName))
+
 if __name__ == '__main__':
-    nose.run(argv=[__file__, '-v', '--nologcapture'], defaultTest=__name__)
+#     nose.run(argv=[__file__, '-v', '--nologcapture'], defaultTest=__name__)
+    nose.run(argv=[__file__, '-v', '-s'], defaultTest=__name__)
