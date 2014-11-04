@@ -27,6 +27,7 @@ class TestDatabase():  # cannot inherit from unittest.TestCase if we want to use
         databaseDirectory = settings['database.directory']
         cls.database = RMGDatabase()
         cls.database.load(databaseDirectory, kineticsFamilies='all')
+#         cls.database.load(databaseDirectory, kineticsFamilies=['Disproportionation'])
     
     # These are generators, that call the methods below.
     def test_kinetics(self):
@@ -284,6 +285,7 @@ class TestDatabase():  # cannot inherit from unittest.TestCase if we want to use
                 fullChildList=[]
                 for child in node.children:
                     fullChildList.extend(getChildrenThatAreGroups(child))
+                    if not node in fullChildList: fullChildList.append(node)
                 return fullChildList
             else:
                 return [node]
@@ -292,6 +294,7 @@ class TestDatabase():  # cannot inherit from unittest.TestCase if we want to use
             fullSiblingList=[]
             for node in siblingList:
                 fullSiblingList.extend(getChildrenThatAreGroups(node))
+                if not node in fullSiblingList: fullSiblingList.append(node)
             return fullSiblingList
         
         originalFamily = self.database.kinetics.families[family_name]
@@ -301,14 +304,19 @@ class TestDatabase():  # cannot inherit from unittest.TestCase if we want to use
         nodesChecked=[]
         for nodeName, childNode in family.entries.iteritems():
             if childNode in nodesChecked: continue
+            nodesChecked.append(childNode)
             #top nodes can allow overlapping or even identical definitions (e.g. R recombination), so they get an automatic pass
             #We also do not need to check products or their children, so these also get an automatic pass
             if childNode in originalFamily.groups.top or childNode in originalFamily.forwardTemplate.products or childNode.parent in originalFamily.forwardTemplate.products: continue
             #siblings are all 
             parentNode = childNode.parent
-            siblingList=getFullSiblingList(parentNode.children)
-            nodesChecked.extend(siblingList)
-                        
+            fullSiblingList=getFullSiblingList(parentNode.children)
+            nodesChecked.extend(fullSiblingList)
+            
+            siblingList=[]
+            for node in fullSiblingList:
+                if not isinstance(node.item, LogicOr): siblingList.append(node)
+                       
             for sibling1 in siblingList:
                 #Create a shallow copy of siblingList which will be modified over this iteration
                 siblingListCopy=copy(siblingList)
@@ -324,6 +332,7 @@ class TestDatabase():  # cannot inherit from unittest.TestCase if we want to use
                         #list of booleans checking every combination of atom groupAtoms for each labeledAtom
                         atom1InAtom2=[]
                         for groupAtom1 in groupAtoms1.atomType:
+                            if key not in labeledAtoms2: continue
                             atom1InAtom2.append(groupAtom1 in labeledAtoms2[key].atomType)
                             for groupAtom2 in labeledAtoms2[key].atomType:
                                 atom1InAtom2.append(groupAtom1 in groupAtom2.specific)
@@ -348,7 +357,7 @@ class TestDatabase():  # cannot inherit from unittest.TestCase if we want to use
                     for sibling2 in siblingListCopy:
                         if sibling2 in overlapFound: continue
                         elif family.matchNodeToChild(sibling2,copyNode):
-                            print "In {family} family, group {sibling} overlaps with {child}.".format(family=family_name, sibling=sibling2.label, child=sibling1.label)
+                            print "In {family} family, group {sibling2} overlaps with {sibling1}.".format(family=family_name, sibling2=sibling2.label, sibling1=sibling1.label)
                             overlapFound.append(sibling2)
                         
     def general_checkNodesFoundInTree(self, group_name, group):
