@@ -311,6 +311,27 @@ class TestDatabase():  # cannot inherit from unittest.TestCase if we want to use
         """
         This tests whether the units in a kinetics family are correct
         """
+        
+        def checkAttributes(entry, essentialAttributes, optionalAttributes):
+            for attribute in optionalAttributes:
+                if hasattr(entry.data, attribute) and getattr(entry.data, attribute) is not None:
+                    if attribute in unitsDict:
+                        nose.tools.assert_true(getattr(entry.data, attribute).units in unitsDict[attribute], "In {0}, entry {1} has incorrect units for {2}".format(family_name, label, attribute))
+            for attribute in essentialAttributes:
+                if attribute in unitsDict:
+                    if attribute.lower() in ['a', 'kunits', 'kdata', 'klist']:
+                        if family_name in UNIMOLECULAR_KINETICS_FAMILIES:
+                            nose.tools.assert_true(getattr(entry.data, attribute).units in unitsDict[attribute][0], "In {0}, entry {1} has incorrect units for {2}".format(family_name, label, attribute))
+                        elif family_name in BIMOLECULAR_KINETICS_FAMILIES:
+                            nose.tools.assert_true(getattr(entry.data, attribute).units in unitsDict[attribute][1], "In {0}, entry {1} has incorrect units for {2}".format(family_name, label, attribute))
+                        else: raise ValueError("Kinetics family {0} not found as bimolecular or unimolecular".format(family_name))  
+                    else:
+                        nose.tools.assert_true(getattr(entry.data, attribute).units in unitsDict[attribute], "In {0}, entry {1} has incorrect units for {2}".format(family_name, label, attribute))
+                    if attribute in listlist:
+                        nose.tools.assert_true(isinstance(getattr(entry.data, attribute).value, list), "In {0}, entry {1} must have a list for {2}".format(family_name, label, attribute)) 
+                    elif attribute in dictlist:
+                        nose.tools.assert_true(isinstance(getattr(entry.data, attribute).value, dict), "In {0}, entry {1} must have a dictionary for {2}".format(family_name, label, attribute)) 
+               
         family = self.database.kinetics.families[family_name]
         allTemperatureUnits=copy(Temperature.commonUnits)
         allTemperatureUnits.extend(Temperature.units)
@@ -334,7 +355,7 @@ class TestDatabase():  # cannot inherit from unittest.TestCase if we want to use
         lindemannEssentialAttributes=['arrheniuslow', 'arrheniushigh','efficiency']
         troeEssentialAttributes=['arrheniuslow', 'arrheniushigh', 'alpha', 'efficiency']
         kineticsDataEssentialAttributes=['Tlist', 'klist']
-        pdepKineticsDataEssentialAttributes=['Tdata', 'Pdata', 'kdata']
+        pdepKineticsDataEssentialAttributes=['Tdata', 'Pdata', 'kdata'] #No entries of PdepKinetics in database at the moment. 
         pdepKineticsDataOptionalAttributes=['highPlimit']
 
         unitsDict={"Tmin": allTemperatureUnits,
@@ -343,19 +364,29 @@ class TestDatabase():  # cannot inherit from unittest.TestCase if we want to use
                    "Pmax" : allPressureUnits,
                    'A': [UnimolecularRateCoefficientUnits, BimolecularRateCoefficientUnits],
                    'T0': allTemperatureUnits,
+                   'highPlimit': allPressureUnits,
                    'kunits': [UnimolecularRateCoefficientUnits, BimolecularRateCoefficientUnits],
-                   'highPlimit': allPressureUnits
+                   #Below all keys are supposed to refer to attributes that are ([list], unit)
+                   'pressure': allPressureUnits,
+                   'Tlist': allTemperatureUnits,
+                   'klist': [UnimolecularRateCoefficientUnits, BimolecularRateCoefficientUnits],
+                   'Tdata': allTemperatureUnits,
+                   'Pdata': allPressureUnits,
+                   'kdata': [UnimolecularRateCoefficientUnits, BimolecularRateCoefficientUnits],
                    }
-
-    
+        #these are a list of attributes that are lists
+        listlist=['pressure', 'arrhenius', 'Tlist', 'klist', 'Tdata', 'Pdata', 'kdata', 'coeffs']
+        
+        #this is a list of attributes that are dictionaries
+        dictlist=['efficiencies']
         
         
         for label, entries in family.rules.entries.iteritems():
             for entry in entries:
                 essentialAttributes=[]
                 optionalAttributes=copy(kineticModelOptionalAttributes)
-                #Check essential attributes are there:
                 
+                #Figure out type of entry
                 if isinstance(entry.data, Arrhenius):
                     essentialAttributes=arrheniusEssentialAttributes
                     optionalAttributes.extend(arrheniusOptionalAttributes)
@@ -365,48 +396,53 @@ class TestDatabase():  # cannot inherit from unittest.TestCase if we want to use
                     optionalAttributes.extend(arrheniusOptionalAttributes)
                 elif isinstance(entry.data, PDepArrhenius):
                     essentialAttributes=pdepArrheniusEssentialAttributes
+                    for x in entry.data.arrhenius:
+                        checkAttributes(x, arrheniusEssentialAttributes, arrheniusOptionalAttributes+kineticModelOptionalAttributes)
                 elif isinstance(entry.data, Chebyshev):
                     essentialAttributes=chebyshevEssentialAttributes
                 elif isinstance(entry.data, ThirdBody):
                     essentialAttributes=thirdBodyEssentialAttributes
+                    checkAttributes(entry.data.arrheniuslow, arrheniusEssentialAttributes, arrheniusOptionalAttributes+kineticModelOptionalAttributes)
                 elif isinstance(entry.data, Lindemann):
                     essentialAttributes=lindemannEssentialAttributes
+                    checkAttributes(entry.data.arrheniuslow, arrheniusEssentialAttributes, arrheniusOptionalAttributes+kineticModelOptionalAttributes)
+                    checkAttributes(entry.data.arrheniushigh, arrheniusEssentialAttributes, arrheniusOptionalAttributes+kineticModelOptionalAttributes)
                 elif isinstance(entry.data, Troe):
                     essentialAttributes=troeEssentialAttributes
+                    checkAttributes(entry.data.arrheniuslow, arrheniusEssentialAttributes, arrheniusOptionalAttributes+kineticModelOptionalAttributes)
+                    checkAttributes(entry.data.arrheniushigh, arrheniusEssentialAttributes, arrheniusOptionalAttributes+kineticModelOptionalAttributes)
                 elif isinstance(entry.data, KineticsData):
                     essentialAttributes=kineticsDataEssentialAttributes
                 elif isinstance(entry.data, PDepKineticsData):
                     essentialAttributes=pdepKineticsDataEssentialAttributes
                     optionalAttributes.extend(pdepKineticsDataOptionalAttributes)               
                 
-                #Check optional attributes    
-                for attribute in optionalAttributes:
-                    if hasattr(entry.data, attribute) and getattr(entry.data, attribute) is not None:
-                        if attribute in unitsDict:
-                            nose.tools.assert_true(getattr(entry.data, attribute).units in unitsDict[attribute], "In {0}, entry {1} has incorrect units for {2}".format(family_name, label, attribute))
-                for attribute in essentialAttributes:
-                    if attribute in unitsDict:
-                        if attribute=='A':
-                            if family_name in UNIMOLECULAR_KINETICS_FAMILIES:
-                                nose.tools.assert_true(getattr(entry.data, attribute).units in unitsDict[attribute][0], "In {0}, entry {1} has incorrect units for {2}".format(family_name, label, attribute))
-                            elif family_name in BIMOLECULAR_KINETICS_FAMILIES:
-                                nose.tools.assert_true(getattr(entry.data, attribute).units in unitsDict[attribute][1], "In {0}, entry {1} has incorrect units for {2}".format(family_name, label, attribute))
-                            else: raise ValueError("Kinetics family {0} not found as bimolecular or unimolecular".format(family_name))  
-                        else:
-                            nose.tools.assert_true(getattr(entry.data, attribute).units in unitsDict[attribute], "In {0}, entry {1} has incorrect units for {2}".format(family_name, label, attribute))
-                    
-                
-#                 if isinstance(entry.data, Arrhenius) or isinstance(entry.data, ArrheniusEP):
-#                     if family_name in UNIMOLECULAR_KINETICS_FAMILIES:
-#                         nose.tools.assert_true(entry.data.A.units in UnimolecularRateCoefficientUnits)
-#                     elif family_name in BIMOLECULAR_KINETICS_FAMILIES:
-#                         nose.tools.assert_true(entry.data.A.units in BimolecularRateCoefficientUnits)
-#                     nose.tools.assert_true(entry.data.E0.units in allEnergyUnits)
-#                     nose.tools.assert_true(entry.data.E0.units in allEnergyUnits)
-#                     if hasattr(entry.data, 'T0') and entry.data.T0 is not None:
-#                         nose.tools.assert_true(entry.data.T0 in allTemperatureUnits, "In {0}, entry {1} has incorrect units for T0".format(family_name, label, attribute))
-#                 
-        
+                checkAttributes(entry, essentialAttributes, optionalAttributes)
+                 
+#                 #Check optional attributes    
+#                 for attribute in optionalAttributes:
+#                     if hasattr(entry.data, attribute) and getattr(entry.data, attribute) is not None:
+#                         if attribute in unitsDict:
+#                             nose.tools.assert_true(getattr(entry.data, attribute).units in unitsDict[attribute], "In {0}, entry {1} has incorrect units for {2}".format(family_name, label, attribute))
+#                 for attribute in essentialAttributes:
+#                     if attribute in unitsDict:
+#                         if attribute.lower() in ['a', 'kunits', 'kdata', 'klist']:
+#                             if family_name in UNIMOLECULAR_KINETICS_FAMILIES:
+#                                 nose.tools.assert_true(getattr(entry.data, attribute).units in unitsDict[attribute][0], "In {0}, entry {1} has incorrect units for {2}".format(family_name, label, attribute))
+#                             elif family_name in BIMOLECULAR_KINETICS_FAMILIES:
+#                                 nose.tools.assert_true(getattr(entry.data, attribute).units in unitsDict[attribute][1], "In {0}, entry {1} has incorrect units for {2}".format(family_name, label, attribute))
+#                             else: raise ValueError("Kinetics family {0} not found as bimolecular or unimolecular".format(family_name))  
+#                         else:
+#                             nose.tools.assert_true(getattr(entry.data, attribute).units in unitsDict[attribute], "In {0}, entry {1} has incorrect units for {2}".format(family_name, label, attribute))
+#                         if attribute in listlist:
+#                             nose.tools.assert_true(isinstance(getattr(entry.data, attribute).value, list), "In {0}, entry {1} must have a list for {2}".format(family_name, label, attribute)) 
+#                         elif attribute in dictlist:
+#                             nose.tools.assert_true(isinstance(getattr(entry.data, attribute).value, dict), "In {0}, entry {1} must have a dictionary for {2}".format(family_name, label, attribute)) 
+#                             
+#                     if attribute is 'arrhenius':
+#                         for x in entry.data.arrhenius: checkAttributes(x, arrheniusEssentialAttributes, arrheniusOptionalAttributes+kineticModelOptionalAttributes)
+#                     elif attribute in ['arrheniushigh', 'arrheniuslow']:
+#                         checkAttributes(getattr(entry.data, attribute), arrheniusEssentialAttributes, arrheniusOptionalAttributes+kineticModelOptionalAttributes)      
     def general_checkNodesFoundInTree(self, group_name, group):
         """
         This test checks whether nodes are found in the tree, with proper parents.
