@@ -24,8 +24,8 @@ conditions=rt.generateAllConditions("IdealGasReactor", 0.005, molFracList, Tlist
 #test ObservablesTestCase
 majorSpeciesSmiles=['CC', 'C=C', 'C#C','C', '[CH3]', 'C[CH2]', '[H]', '[H][H]', 'C=[CH]', 'CC[CH2]', 'Ar']
 
-A=rt.ObservablesTestCase("Ethane Pyrolysis (Minimal)", "/Users/Nate/Dropbox (MIT)/Research/RMG/regressiveTests/minimal2",
-                    "/Users/Nate/Dropbox (MIT)/Research/RMG/regressiveTests/minimal2", conditions, majorSpeciesSmiles, exptData=None)
+A=rt.ObservablesTestCase("Ethane Pyrolysis (Minimal)", "regression/egA",
+                    "regression/egB", conditions, majorSpeciesSmiles, exptData=None)
 
 print A.__str__()
 A.runSimulations()
