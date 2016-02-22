@@ -158,7 +158,7 @@ class Condition:
         Return a string representation of the condition.
         """
         string=""
-        string += 'Reactory Type: {0}, '.format(self.reactorType)
+        string += 'Reactor Type: {0}, '.format(self.reactorType)
         string += 'Reaction Time: {:0.10f}, '.format(self.reactionTime)
         if self.T0 != -1: string += 'T0: {:0.10f}, '.format(self.T0)
         if self.P0 != -1: string += 'P0: {:0.10f}, '.format(self.P0)
