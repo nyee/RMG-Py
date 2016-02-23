@@ -3,6 +3,7 @@ import os.path
 import numpy as np
 from rmgpy.chemkin import loadSpeciesDictionary
 from rmgpy.species import Species
+from rmgpy.tools.plot import GenericData, GenericPlot
 import cantera as ct
 from rmgpy.tools.plot import *
 
@@ -118,10 +119,10 @@ class Condition:
     `reactionTime`          A float giving the reaction time in seconds
     `molFrac`               A dictionary giving the initial mol Fractions. Keys are SMILES strings and values are floats
 
-    To specifiy the system for an ideal gas, you must define 2 of the following 3 parameters:
+    To specifiy the system for an ideal gas, you must exactly 2 of the following 3 parameters:
     `T0`                    A float giving the initial temperature in K
     'P0'                    A float giving the initial pressure in Pa
-    'V0'                    A float giving the initial reactor volume in m^3
+    'V0'                    A float giving the initial specific volume in m^3/kg
     ======================= ====================================================
 
 
@@ -138,6 +139,14 @@ class Condition:
         self.T0=float(T0)
         self.P0=float(P0)
         self.V0=float(V0)
+
+        #check to see that one of T0, P0, and V0 is unspecificed (left at default of -1)
+        checkList=[self.T0, self.P0, self.V0]
+        total=0
+        for value in checkList:
+            if value==-1: total+=value
+        assert total==-1, "For a condition, one of the state variables: T0, P0, or V0 must be left out, otherwise the system is overspecified"
+
 
     def __repr__(self):
         """
@@ -245,7 +254,7 @@ class ObservablesTestCase:
         return 'Observables Test Case: {0}'.format(self.title)
 
     #need to add a bunch of if statements to change based on condition options
-    def compare(self):
+    def compare(self, plot=False):
         """
         Compare an old and new model
         """
@@ -266,19 +275,19 @@ class ObservablesTestCase:
             inertList = ['Ar','He','NN','Ne']
                     
             conditionData[modelName] = self.runSimulations(model, speciesList, speciesDict)
-        
-        for i in range(len(conditionData['old'])):
-            time, dataList = conditionData['old'][i]
-            speciesData = [data for data in dataList if data.species not in inertList]
-            oldSpeciesPlot = SimulationPlot(xVar=time, yVar=speciesData, ylabel='Mole Fraction')
-            
-            time, dataList = conditionData['new'][i]
-            speciesData = [data for data in dataList if data.species not in inertList]
-            newSpeciesPlot = SimulationPlot(xVar=time, yVar=speciesData, ylabel='Mole Fraction')
-            
-            # Name after the index of the condition
-            # though it may be better to name it after the actual conditions in T, P, etc
-            oldSpeciesPlot.comparePlot(newSpeciesPlot,filename='simulation_condition_{0}.png'.format(i+1))
+        if plot:
+            for i in range(len(conditionData['old'])):
+                time, dataList = conditionData['old'][i]
+                speciesData = [data for data in dataList if data.species not in inertList]
+                oldSpeciesPlot = SimulationPlot(xVar=time, yVar=speciesData, ylabel='Mole Fraction')
+
+                time, dataList = conditionData['new'][i]
+                speciesData = [data for data in dataList if data.species not in inertList]
+                newSpeciesPlot = SimulationPlot(xVar=time, yVar=speciesData, ylabel='Mole Fraction')
+
+                # Name after the index of the condition
+                # though it may be better to name it after the actual conditions in T, P, etc
+                oldSpeciesPlot.comparePlot(newSpeciesPlot,filename='simulation_condition_{0}.png'.format(i+1))
 
     def runSimulations(self, model, speciesList, speciesDict):
         """
@@ -295,9 +304,17 @@ class ObservablesTestCase:
                 molFrac[speciesDict[smiles]]=value
                         
             # Set Cantera simulation conditions
-            #need if statements here
-            model.TPX = condition.T0, condition.P0, molFrac
-            canteraReactor=ct.IdealGasReactor(model)
+            if condition.T0==-1:
+                model.PVX = condition.P0, condition.V0, molFrac
+            elif condition.P0==-1:
+                model.TVX = condition.T0, condition.V0, molFrac
+            else:
+                model.TPX= condition.T0, condition.P0, molFrac
+
+            #Set Cantera Reactor Type
+            if condition.reactorType=="IdealGasReactor": canteraReactor=ct.IdealGasReactor(model)
+            elif condition.reactorType=="IdealGasConstPressureReactor": canteraReactor=ct.IdealConstPressureGasReactor(model)
+            else: raise Exception("reactorType is not compatiable. Please set to IdealGasReactor or IdealConstPressureGasReactor")
             canteraSimulation=ct.ReactorNet([canteraReactor])
 
             time = 0.0

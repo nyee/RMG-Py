@@ -1,16 +1,15 @@
 import regressiveTest as rt
 
 #Test Condition class
-#x=rt.Condition('IdealGasReactor', 5, {'Ar':0.95, 'X':0.05}, 900.0, 100000.0, 0.09)
-#print x.__repr__()
-#print x.__str__()
+x=rt.Condition('IdealGasReactor', 5, {'Ar':0.95, 'X':0.05}, 900.0, 100000.0)
+print x.__repr__()
+print x.__str__()
 
 #rt.Condition(reactorType="IdealGasReactor", reactionTime=5, molFrac={'X': 0.05, 'Ar': 0.95}, T0=900.0000000000, P0=100000.0000000000, V0=0.0900000000)
 
 #Test generateAllConditions
 # molFracList=[{'X': 0.05, 'Ar': 0.95}, {'X': 0.025, 'Ar': 0.975}]
 # Tlist=[700,800,1000]
-# Plist=[10000, 20000, 30000]
 # Vlist=[0.1, 0.2, 0.5]
 # conditions=rt.generateAllConditions("IdealGasReactor", 5, molFracList, Tlist, Plist, Vlist)
 # conditions=rt.generateAllConditions("IdealGasReactor", 5, molFracList, Tlist, Plist)
