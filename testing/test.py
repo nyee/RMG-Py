@@ -28,4 +28,4 @@ A=rt.ObservablesTestCase("Ethane Pyrolysis (Minimal)", "regression/egA",
                     "regression/egB", conditions, majorSpeciesSmiles, exptData=None)
 
 print A.__str__()
-A.runSimulations()
+A.compare()

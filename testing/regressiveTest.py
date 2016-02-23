@@ -4,6 +4,7 @@ import numpy as np
 from rmgpy.chemkin import loadSpeciesDictionary
 from rmgpy.species import Species
 import cantera as ct
+from rmgpy.tools.plot import *
 
 #for time timepoint1, it returns the closest value in list t2 as well as the index of this value
 def getNearestTime(timepoint1, t2):
@@ -244,41 +245,104 @@ class ObservablesTestCase:
         return 'Observables Test Case: {0}'.format(self.title)
 
     #need to add a bunch of if statements to change based on condition options
-    def runSimulations(self):
+    def compare(self):
+        """
+        Compare an old and new model
+        """
+        conditionData = {}
+        for modelName in ['old','new']:
+                
+            # Set the model, speciesList, and dictionary initial mole fractions
+            if modelName == 'old':
+                model = ct.Solution(os.path.join(self.oldDir,'chem.cti'))
+                speciesList = self.oldSpeciesList
+                speciesDict = self.oldDict
+            else:
+                model = ct.Solution(os.path.join(self.newDir,'chem.cti'))
+                speciesList = self.newSpeciesList
+                speciesDict = self.newDict
+            
+            # Ignore Inerts
+            inertList = ['Ar','He','NN','Ne']
+                    
+            conditionData[modelName] = self.runSimulations(model, speciesList, speciesDict)
+        
+        for i in range(len(conditionData['old'])):
+            time, dataList = conditionData['old'][i]
+            speciesData = [data for data in dataList if data.species not in inertList]
+            oldSpeciesPlot = SimulationPlot(xVar=time, yVar=speciesData, ylabel='Mole Fraction')
+            
+            time, dataList = conditionData['new'][i]
+            speciesData = [data for data in dataList if data.species not in inertList]
+            newSpeciesPlot = SimulationPlot(xVar=time, yVar=speciesData, ylabel='Mole Fraction')
+            
+            # Name after the index of the condition
+            # though it may be better to name it after the actual conditions in T, P, etc
+            oldSpeciesPlot.comparePlot(newSpeciesPlot,filename='simulation_condition_{0}.png'.format(i+1))
 
-        oldModel=ct.Solution(os.path.join(self.oldDir,'chem.cti'))
-        newModel=ct.Solution(os.path.join(self.newDir,'chem.cti'))
+    def runSimulations(self, model, speciesList, speciesDict):
+        """
+        Run a selection of conditions in Cantera and return
+        generic data objects containing the time, pressure, temperature,
+        and mole fractions from the simulations.
+        """
+        
+        conditionData = []
         for condition in self.conditions:
-
-            #convert to RMG names
-            oldMolFrac={}
+            # Set the mole fractions
+            molFrac = {}
             for smiles, value in condition.molFrac.iteritems():
-                oldMolFrac[self.oldDict[smiles]]=value
-
+                molFrac[speciesDict[smiles]]=value
+                        
+            # Set Cantera simulation conditions
             #need if statements here
-            oldModel.TPX= condition.T0, condition.P0, oldMolFrac
-
-            #need if statements here
-            rOld=ct.IdealGasReactor(oldModel)
-
-            simOld=ct.ReactorNet([rOld])
+            model.TPX = condition.T0, condition.P0, molFrac
+            canteraReactor=ct.IdealGasReactor(model)
+            canteraSimulation=ct.ReactorNet([canteraReactor])
 
             time = 0.0
+            
+            # Initialize the variables to be saved
             times = np.zeros(100)
-            #This is the number of extra variables we want to keep track of besides the species molFractions. Should decide what else people might want
-            extras=2
-            dataOld = np.zeros((100,len(self.majorSpeciesSmiles)+extras))
+            temperature = np.zeros(100, dtype=np.float64)
+            pressure = np.zeros(100, dtype=np.float64)
+            speciesData = np.zeros((100,len(speciesList)),dtype=np.float64)
 
-            print condition
-            print('%10s %10s %10s %14s' % ('t [s]','T [K]','P [Pa]','u [J/kg]'))
+            #print condition
+            #print('%10s %10s %10s %14s' % ('t [s]','T [K]','P [Pa]','u [J/kg]'))
+            
+            
+            # Run the simulation over 100 time points
             for n in range(100):
                 time += condition.reactionTime/100
-                simOld.advance(time)
+                canteraSimulation.advance(time)
                 times[n] = time * 1e3  # time in ms
-                dataOld[n,0] = rOld.T
-                dataOld[n,1] = rOld.thermo.P
-                dataOld[n,extras:] = rOld.thermo[self.oldSpeciesList].X
-                print('%10.3e %10.3f %10.3f %14.6e' % (simOld.time, rOld.T,
-                                                       rOld.thermo.P, rOld.thermo.u))
-
-            #Save stuf in results somehow. Gotta work with Connie to figure out how to make plot items
+                temperature[n] = canteraReactor.T
+                pressure[n] = canteraReactor.thermo.P
+                speciesData[n,:] = canteraReactor.thermo[speciesList].X
+                
+            # Resave data into generic data objects
+            time = GenericData(label = 'Time', 
+                               data = times,
+                               units = 'ms')
+            temperature = GenericData(label='Temperature',
+                                      data = temperature,
+                                      units = 'K')
+            pressure = GenericData(label='Pressure',
+                                      data = pressure,
+                                      units = 'Pa')
+            dataList = []
+            dataList.append(temperature)
+            dataList.append(pressure)
+            
+            for smiles in speciesDict.keys():
+                speciesLabel = speciesDict[smiles]
+                index = speciesList.index(speciesLabel)
+                genericData = GenericData(label=speciesLabel,
+                                          species = smiles,
+                                          data = speciesData[:,index])
+                dataList.append(genericData)
+            
+            conditionData.append((time,dataList))
+            
+        return conditionData
