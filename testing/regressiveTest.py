@@ -3,6 +3,7 @@ import os.path
 import numpy as np
 from rmgpy.chemkin import loadSpeciesDictionary
 from rmgpy.species import Species
+from rmgpy.chemkin import getSpeciesIdentifier
 from rmgpy.tools.plot import GenericData, GenericPlot
 import cantera as ct
 from rmgpy.tools.plot import *
@@ -58,7 +59,7 @@ def findIgnitionDelay(t, T):
 
     return t[maxIndex]
 
-def getNameFromRMGDict(smilesList, speciesDictPath, type="dict"):
+def getSpeciesFromRMGDict(smilesList, speciesDictPath):
     """
     Returns the RMG species names from a list of the SMILES.
 
@@ -71,36 +72,20 @@ def getNameFromRMGDict(smilesList, speciesDictPath, type="dict"):
 
     """
     speciesDict=loadSpeciesDictionary(speciesDictPath)
-    bathGases={"Ar": "Ar", "NN": "N2", "He": "He", "Ne": "Ne"}
-
-    if type=='list':
-        finalList=[]
-        for smiles in smilesList:
-            if smiles in bathGases:
-                finalList.append(bathGases[smiles])
-            else:
-                species1=Species().fromSMILES(smiles)
-                for name, species2 in speciesDict.iteritems():
-                    if species2.isIsomorphic(species1):
-                        finalList.append(name)
-                        break
-                else: raise KeyError("The major species {0} does not appear in the dictionary at {1}".format(smiles, speciesDictPath))
-        return finalList
-
-    elif type=='dict':
-        finalDict={}
-        for smiles in smilesList:
-            if smiles in bathGases:
-                finalDict[smiles]=bathGases[smiles]
-            else:
-                species1=Species().fromSMILES(smiles)
-                for name, species2 in speciesDict.iteritems():
-                    if species2.isIsomorphic(species1):
-                        finalDict[smiles]=name
-                        break
-                else: raise KeyError("The major species {0} does not appear in the dictionary at {1}".format(smiles, speciesDictPath))
-        return finalDict
-    else: raise Exception("The 'type' argument is not compatible. Please enter either 'list' or 'dict'")
+    #Not strictly necesssary, but its likely that people will forget to put the brackets around the bath gasses
+    bathGases={"Ar": "[Ar]", "He": "[He]", "Ne": "[Ne]"}
+    finalList=[]
+    for smiles in smilesList:
+        if smiles in bathGases:
+            finalList.append(Species().fromSMILES(bathGases[smiles]))
+        else:
+            species1=Species().fromSMILES(smiles)
+            for name, species2 in speciesDict.iteritems():
+                if species2.isIsomorphic(species1):
+                    finalList.append(species2)
+                    break
+            else: raise KeyError("The major species {0} does not appear in the dictionary at {1}".format(smiles, speciesDictPath))
+    return finalList
 
 #######################################################################################
 #Currently only implementing simple inputs I'm familiar with. New version should probably include more:
@@ -218,7 +203,7 @@ class ObservablesTestCase:
     Attribute               Description
     ======================= ====================================================
     Inputted attributs:
-    'title'                 A string describing what is tested and the major species: e.g. "Isobutanol P-dep"
+    'title'                 A string describing the test. For regressive tests, should be same as example's name.
     `newDir`                A string path to chem.inp and species.txt of new model
     `oldDir`                A string path to chem.inp and species.txt of new model
     `conditions`            A list of the :class: 'Condition' objects describing reaction conditions
@@ -242,16 +227,21 @@ class ObservablesTestCase:
         self.exptData=exptData
 
         self.results=[]
-        self.oldDict=getNameFromRMGDict(majorSpeciesSmiles, os.path.join(oldDir, 'species_dictionary.txt'), type="dict")
-        self.newDict=getNameFromRMGDict(majorSpeciesSmiles, os.path.join(newDir, 'species_dictionary.txt'), type="dict")
-        self.oldSpeciesList=getNameFromRMGDict(majorSpeciesSmiles, os.path.join(oldDir, 'species_dictionary.txt'), type="list")
-        self.newSpeciesList=getNameFromRMGDict(majorSpeciesSmiles, os.path.join(newDir, 'species_dictionary.txt'), type="list")
+        self.oldSpecies=getSpeciesFromRMGDict(majorSpeciesSmiles, os.path.join(oldDir, 'species_dictionary.txt'))
+        self.newSpecies=getSpeciesFromRMGDict(majorSpeciesSmiles, os.path.join(newDir, 'species_dictionary.txt'))
 
     def __str__(self):
         """
         Return a string representation of the species, using the label'.
         """
         return 'Observables Test Case: {0}'.format(self.title)
+
+    def convertCk2Cti(self, **kwargs):
+        outName=os.path.join(self.newDir, "chem.cti")
+        if os.path.exists(outName):
+            os.remove(outName)
+        parser = ct.ck2cti.Parser()
+        parser.convertMech(os.path.join(self.oldDir, "chem.cti"), outName=outName, **kwargs)
 
     #need to add a bunch of if statements to change based on condition options
     def compare(self, plot=False):
@@ -264,17 +254,31 @@ class ObservablesTestCase:
             # Set the model, speciesList, and dictionary initial mole fractions
             if modelName == 'old':
                 model = ct.Solution(os.path.join(self.oldDir,'chem.cti'))
-                speciesList = self.oldSpeciesList
-                speciesDict = self.oldDict
+                speciesList = self.oldSpecies
             else:
                 model = ct.Solution(os.path.join(self.newDir,'chem.cti'))
-                speciesList = self.newSpeciesList
-                speciesDict = self.newDict
+                speciesList = self.newSpecies
             
             # Ignore Inerts
             inertList = ['Ar','He','NN','Ne']
                     
-            conditionData[modelName] = self.runSimulations(model, speciesList, speciesDict)
+            conditionData[modelName] = self.runSimulations(model, speciesList)
+
+        #For now make print statements about each none matching data
+        conditionsBroken=[]
+        variablesFailed=[]
+        for i in range(len(conditionData['old'])):
+            timeOld, dataListOld = conditionData['old'][i]
+            timeNew, dataListNew = conditionData['new'][i]
+
+            for variableOld, variableNew in zip(dataListOld, dataListNew):
+                if not curvesSimilar(timeOld.data, variableOld.data, timeNew.data, variableNew.data, 0.05):
+                    if i not in conditionsBroken: conditionsBroken.append(i)
+                    print "{0} do not match in condition {1:d}".format(variableOld.label, i)
+                    variablesFailed.append((self.conditions[i], variableOld.label, variableOld, variableNew))
+        for index in conditionsBroken:
+            print "condition {0:d} corresponds to {1}".format(index, self.conditions[index].__str__())
+
         if plot:
             for i in range(len(conditionData['old'])):
                 time, dataList = conditionData['old'][i]
@@ -289,11 +293,16 @@ class ObservablesTestCase:
                 # though it may be better to name it after the actual conditions in T, P, etc
                 oldSpeciesPlot.comparePlot(newSpeciesPlot,filename='simulation_condition_{0}.png'.format(i+1))
 
-    def runSimulations(self, model, speciesList, speciesDict):
+    def runSimulations(self, model, speciesList):
         """
         Run a selection of conditions in Cantera and return
         generic data objects containing the time, pressure, temperature,
         and mole fractions from the simulations.
+
+        returns conditionData a list of of tuples: (time, dataList) for each condition in the same order as conditions
+        time is a GenericData object which gives the time domain for each profile
+        dataList is a list of GenericData objects for the temperature, profile, and mole fraction of major species
+
         """
         
         conditionData = []
@@ -301,7 +310,10 @@ class ObservablesTestCase:
             # Set the mole fractions
             molFrac = {}
             for smiles, value in condition.molFrac.iteritems():
-                molFrac[speciesDict[smiles]]=value
+                print smiles
+                print self.majorSpeciesSmiles.index(smiles)
+                print speciesList[self.majorSpeciesSmiles.index(smiles)]
+                molFrac[getSpeciesIdentifier(speciesList[self.majorSpeciesSmiles.index(smiles)])]=value
                         
             # Set Cantera simulation conditions
             if condition.T0==-1:
@@ -336,7 +348,7 @@ class ObservablesTestCase:
                 times[n] = time * 1e3  # time in ms
                 temperature[n] = canteraReactor.T
                 pressure[n] = canteraReactor.thermo.P
-                speciesData[n,:] = canteraReactor.thermo[speciesList].X
+                speciesData[n,:] = canteraReactor.thermo[[getSpeciesIdentifier(j) for j in speciesList]].X
                 
             # Resave data into generic data objects
             time = GenericData(label = 'Time', 
@@ -352,9 +364,9 @@ class ObservablesTestCase:
             dataList.append(temperature)
             dataList.append(pressure)
             
-            for smiles in speciesDict.keys():
-                speciesLabel = speciesDict[smiles]
-                index = speciesList.index(speciesLabel)
+            for i, smiles in enumerate(self.majorSpeciesSmiles):
+                speciesLabel = smiles
+                index = i
                 genericData = GenericData(label=speciesLabel,
                                           species = smiles,
                                           data = speciesData[:,index])

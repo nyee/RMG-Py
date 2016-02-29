@@ -4,18 +4,67 @@ import numpy as np
 import regressiveTest as rt
 import cantera as ct
 import collections
+from rmgpy.tools.plot import findNearest, GenericData
+
+title='minimal'
 
 #5% ethane, 95% Ar, variable temperature, P=1.4-4 atm
-conditions=[]
-
+molFracList=[{'CC': 0.05, 'Ar': 0.95}]
+Plist=[278643.8]
+Tlist=range(1100,1300,100)
+terminationTime = 5e-5
+conditions=rt.generateAllConditions("IdealGasReactor", terminationTime, molFracList, Tlist, Plist)
 
 # majorSpecies=['C', '[CH3]', 'C[CH2]', '[H]', 'C=C', '[H][H]', 'C=[CH]', 'CC[CH2]', 'C#C', 'C=CC=C'] #real one, one below is for testing, make sure to change order
 majorSpecies=['CC', 'C=C', 'C#C','C', '[CH3]', 'C[CH2]', '[H]', '[H][H]', 'C=[CH]', 'CC[CH2]']
-speciesList1=rt.getNameFromRMGDict(majorSpecies, '/Users/Nate/Dropbox (MIT)/Research/RMG/regressiveTests/minimal/species_dictionary.txt')
 
-# speciesList2=rt.getSpeciesFromChemkin(majorSpecies, '/Users/Nate/Dropbox (MIT)/Research/RMG/regressiveTests/minimal/species_dictionary.txt')
-speciesList2=rt.getNameFromRMGDict(majorSpecies, '/Users/Nate/Dropbox (MIT)/Research/RMG/regressiveTests/butane1/species_dictionary.txt')
+#Experimental Data
+#I want to make this compatiable with csv files so you don't have to hardcode in the experimental data in python, csv are easier to manipulate anyhow
+########################################################################################################################
+shockTubeEffectiveHeatingTimes=collections.OrderedDict()
+shockTubeEffectiveHeatingTimes[1100]=2.730
+shockTubeEffectiveHeatingTimes[1200]=2.480
+shockTubeEffectiveHeatingTimes[1300]=2.220
+shockTubeEffectiveHeatingTimes[1400]=1.970
+shockTubeEffectiveHeatingTimes[1500]=1.719
+shockTubeEffectiveHeatingTimes[1600]=1.460
+shockTubeEffectiveHeatingTimes[1700]=1.200
+shockTubeEffectiveHeatingTimes[1800]=0.940
+shockTubeEffectiveHeatingTimes[1900]=0.690
 
+
+
+#Taken from figure 1 of Y. Hiadka, K. Sato, H. Hoshikawa, T. Nishimori, H. Tanaka, K. Inami, N. Ito. Combust. Flame, 120 3 (2000), pp. 245-264
+def getExample1Data(conditionData, conditions, shockTubeEffectiveHeatingTimes, smilesInExperiments):
+    """
+    Parses the simulation's data to make generic data objects to compare with shock tube data taken from figure 1 of
+    #Y. Hiadka, K. Sato, H. Hoshikawa, T. Nishimori, H. Tanaka, K. Inami, N. Ito. Combust. Flame, 120 3 (2000), pp. 245-264
+    """
+    #First get the time points close to
+    allResults=[]
+    for T, timepoint in shockTubeEffectiveHeatingTimes.iteritems():
+        for smiles in smilesInExperiments:
+            temperatureResults=GenericData(label=label='Temperature',
+                                      data = []
+                                      units = 'K')
+            for conIndex, data in conditionData:
+                if conditions[conIndex].T0==T:
+                    #index1 is the index of time from the simulation closest to timepoint
+                    #data is organized as (timeArray, rest of data)
+                    index1=findNearest(data[0], timepoint)
+                    for speciesData in data[1]:
+                        if smiles==speciesData.species:
+
+                    if smiles not in exptCompDict1: exptCompDict1[smiles]=[]
+                    #need to multiply by 20, in the experiment, they don't seem to count the Ar in the mole fraction
+                    exptCompDict1[smiles].append(resultsDictionary[T][1][index1][index2+1]*20)
+                (index1, timepoint2)=rt.getNearestTime(timepoint1, resultsDictionary[T][2])
+                for index2, smiles in enumerate(majorSpecies[0:4]):
+                    if smiles not in exptCompDict2: exptCompDict2[smiles]=[]
+                    exptCompDict2[smiles].append(resultsDictionary[T][3][index1][index2+1]*20)
+
+
+############Move to CSV files############
 #Taken from figure 1 of Y. Hiadka, K. Sato, H. Hoshikawa, T. Nishimori, H. Tanaka, K. Inami, N. Ito. Combust. Flame, 120 3 (2000), pp. 245-264
 shockTubeEffectiveHeatingTimes=collections.OrderedDict()
 shockTubeEffectiveHeatingTimes[1100]=2.730
@@ -62,63 +111,7 @@ CH4molfrac[1310]=0.04
 CH4molfrac[1480]=0.16
 CH4molfrac[1530]=0.20
 CH4molfrac[1700]=0.25
-
-
-#key is temperature of run and value is four lists, t1, y1, t2, y2
-resultsDictionary={}
-
-for T in shockTubeEffectiveHeatingTimes:
-    #Run simulation
-    minSim1 = ct.Solution('minimal.cti')
-    # minSim2 = ct.Solution('minimal_mod.cti')
-    minSim2 = ct.Solution('butane1.cti')
-    # minSim2 = ct.Solution('minimal.cti')
-    #Variable temperature, 2.75 atm, 5% ethane
-    minSim1.TPX = T, 278643.8, 'Ar:0.95, {0}:0.05'.format(speciesList1[0])
-    minSim2.TPX = T, 278643.8, 'Ar:0.95, {0}:0.05'.format(speciesList2[0])
-    #Constant volume reactor
-    r1 = ct.IdealGasReactor(minSim1)
-    r2 = ct.IdealGasReactor(minSim2)
-
-    sim1 = ct.ReactorNet([r1])
-    sim2 = ct.ReactorNet([r2])
-    time = 0.0
-    times1 = np.zeros(100)
-    times2 = np.zeros(100)
-    data1 = np.zeros((100,len(majorSpecies)+1))
-    data2 = np.zeros((100,len(majorSpecies)+1))
-
-    print('%10s %10s %10s %14s' % ('t [s]','T [K]','P [Pa]','u [J/kg]'))
-    for n in range(100):
-        time += 5.e-5
-        sim1.advance(time)
-        times1[n] = time * 1e3  # time in ms
-        data1[n,0] = r1.T
-        data1[n,1:] = r1.thermo[speciesList1].X
-        print('%10.3e %10.3f %10.3f %14.6e' % (sim1.time, r1.T,
-                                               r1.thermo.P, r1.thermo.u))
-    time = 0.0
-    #Not sure if its a good idea to advance simulation in same for loop, so going to do a separate one
-    print('%10s %10s %10s %14s' % ('t [s]','T [K]','P [Pa]','u [J/kg]'))
-    for n in range(100):
-        time += 5.e-5
-        sim2.advance(time)
-        times2[n] = time * 1e3  # time in ms
-        data2[n,0] = r2.T
-        data2[n,1:] = r2.thermo[speciesList2].X
-        print('%10.3e %10.3f %10.3f %14.6e' % (sim2.time, r2.T,
-                                               r2.thermo.P, r2.thermo.u))
-
-    resultsDictionary[T]=[times1, data1, times2, data2]
-
-
-    for index, species in enumerate(majorSpecies):
-        if not rt.curvesSimilar(times1, [math.log(x) for x in data1[:,index+1]], times2, [math.log(x) for x in data2[:,index+1]], 0.05):
-            print "{0} concentration is not very similar at temperature {1}".format(species, T)
-            if not type(resultsDictionary[T][-1]) is bool: resultsDictionary[T].append(True)
-    else:
-        if resultsDictionary[T][-1]!=True: resultsDictionary[T].append(False)
-
+########################################################################################################################
     # Plot the results if matplotlib is installed.
     # See http://ma tplotlib.org/ to get it.
 if '--plot' in sys.argv[1:]:
