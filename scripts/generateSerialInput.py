@@ -27,11 +27,6 @@ Still need to set up submission script that runs first RMG job, this script, imp
 second RMG job in sequence.
 
 """
-
-def getMolecularWeight(species):
-    atomicWeight={"C":12.0,
-
-    }
 ################################################################################
 if __name__ == '__main__':
     #Parse arguments
@@ -79,6 +74,7 @@ if __name__ == '__main__':
             if number > lastSimulation:
                 lastSimulation=cp.copy(number)
 
+
     #Now find the correct file, it should be the solver with the highest number at the end
     lastIteration=0
     lastFile=''
@@ -89,6 +85,7 @@ if __name__ == '__main__':
             if number > lastIteration:
                 lastIteration=cp.copy(number)
                 lastFile=cp.copy(filename)
+
     #Extract data from file
     time, dataList=parseCSVData(os.path.join(solverPath, lastFile))
 
@@ -106,7 +103,7 @@ if __name__ == '__main__':
 
     #mol fraction of stream1
     stream1={} #key is a Species Object, value is the final mol fraction from the simulation
-    tol = 0
+    tol = 1E-10
     for item in dataList:
         #Check that it is a species and not volume or a sensitivity
         if item.species is not None or item.label in bathGases:
@@ -154,7 +151,14 @@ if __name__ == '__main__':
                 else:
                     newReactorBlock.append("        '"+ getSpeciesIdentifier(species) + "': "+ str(value)+ ",\n")
 
-
+#Construct adjList dictionary with correct indentation
+    adjListDict={}
+    for component in newStream:
+        newAdjListList=re.split("\n", component.molecule[0].toAdjacencyList())
+        newAdjList=""
+        for line in newAdjListList:
+            newAdjList+="        "+line+"\n"
+        adjListDict[component]=newAdjList
 
 
 ####################Copy in, edit, write out new input file############################################################
@@ -179,11 +183,13 @@ if __name__ == '__main__':
             for component in newStream:
                 newInputList.append("species(\n")
                 if component==additiveSpecies and not additivePresent:
-                    newInputList.append("    label='"+additiveName+"'.\n")
+                    newInputList.append("    label='"+additiveName+"',\n")
                 else:
-                    newInputList.append("    label='"+getSpeciesIdentifier(component)+"'.\n")
+                    newInputList.append("    label='"+getSpeciesIdentifier(component)+"',\n")
                 newInputList.append("    reactive=True,\n")
-                newInputList.append("    structure=SMILES('"+component.molecule[0].toSMILES()+"'),\n")
+                newInputList.append('    structure=adjacencyList(\n        """\n')
+                newInputList.append(adjListDict[component])
+                newInputList.append('        """),\n')
                 newInputList.append(")\n\n")
         #Otherwise just copy the same list
         elif re.search("simpleReactor\(", line):
