@@ -840,6 +840,13 @@ class Database:
             ancestors.extend(self.ancestors(parent))
         return ancestors
 
+    def getTreeDepth(self, node):
+        """
+        Returns an int giving the depth of the entry in its tree. (L5 would return 5)
+        """
+        ancestors=self.ancestors(node)
+        return len(ancestors)
+
     def descendants(self, node):
         """
         Returns all the descendants of a node, climbing down the tree to the bottom.
