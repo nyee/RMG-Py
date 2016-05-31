@@ -1357,5 +1357,4 @@ class ForbiddenStructures(Database):
         f.write('u"""\n')
         f.write(entry.longDesc.strip() + "\n")
         f.write('""",\n')
-
         f.write(')\n\n')
