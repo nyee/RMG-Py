@@ -1013,6 +1013,24 @@ class Database:
             #logging.warning('For {0}, a node {1} with overlapping children {2} was encountered in tree with top level nodes {3}. Assuming the first match is the better one.'.format(structure, root, next, self.top))
             return self.descendTree(structure, atoms, next[0], strict)
 
+    def preOrderSearch(self, entriesToFind, root):
+        """
+        This method descends the tree and returns the first entry in entriesToFind that it encounters
+
+        Args:
+            entriesToFind: List of entries of which we want to know the first encountered
+
+        Returns: First entry found in descent
+        """
+
+        if root in entriesToFind: return root
+
+        for child in root.children:
+            match = self.preOrderSearch(entriesToFind, child)
+            if match: return match
+
+        return None
+
     def areSiblings(self, node, nodeOther):
         """
         Return `True` if `node` and `nodeOther` have the same parent node.  Otherwise, return `False`.
