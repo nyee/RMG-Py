@@ -406,6 +406,25 @@ class GroupAtom(Vertex):
         checkList=[x in allSulfur for x in self.atomType]
 
         return not False in checkList
+
+    def hasWildcards(self):
+        """
+        Return ``True`` if the atom has  wildcards in any of the attributes:
+        atomtype, electronpairs, lone pairs, charge, and bond order. Returns
+        ''False'' if no attribute has wildcards.
+        """
+
+        if len(self.atomType) > 1:
+            return True
+        elif len(self.radicalElectrons) > 1 or len(self.radicalElectrons) == 0:
+            return True
+        elif len(self.lonePairs) > 1:
+            return True
+        for bond in self.bonds.values():
+            if len(bond.order) > 1:
+                return True
+
+        return False
 ################################################################################
 
 class GroupBond(Edge):
