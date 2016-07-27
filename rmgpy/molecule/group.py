@@ -37,6 +37,7 @@ import cython
 
 from .graph import Vertex, Edge, Graph
 from .atomtype import atomTypes, allElements, nonSpecifics, getFeatures
+import rmgpy.molecule.molecule as mol
 
 ################################################################################
 
@@ -1078,3 +1079,9 @@ class Group(Graph):
         checkList.append(self.addExplicitLigands())
 
         return True in checkList
+
+    def makeSampleMolcule(self):
+
+        newMolecule = mol.Molecule()
+
+        return newMolecule
