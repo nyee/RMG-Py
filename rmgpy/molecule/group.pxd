@@ -151,6 +151,8 @@ cdef class Group(Graph):
     
     cpdef bint isIdentical(self, Graph other)
 
+    cpdef bint isAromaticRing(self)
+
     cpdef bint standardizeAtomType(self)
 
     cpdef bint addExplicitLigands(self)
@@ -158,5 +160,9 @@ cdef class Group(Graph):
     cpdef bint standardizeGroup(self)
 
     cpdef Group addImplicitAtomsFromAtomType(self)
+
+    cpdef Group addImplicitBenzene(self)
+
+    #def list mergeOverlap(list rings, int od)
 
     cpdef mol.Molecule makeSampleMolecule(self)
