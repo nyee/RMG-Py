@@ -163,6 +163,4 @@ cdef class Group(Graph):
 
     cpdef Group addImplicitBenzene(self)
 
-    #def list mergeOverlap(list rings, int od)
-
     cpdef mol.Molecule makeSampleMolecule(self)
