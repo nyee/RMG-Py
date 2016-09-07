@@ -1352,7 +1352,6 @@ class Group(Graph):
             atom in the list if possible
             """
             sortedAtomList=[]
-            # print sortedAtomList, type(sortedAtomList)
             while atomList:
                 sortedAtomList.append(atomList.pop(0))
                 previousLength = len(sortedAtomList)
@@ -1465,10 +1464,6 @@ class Group(Graph):
         """
         (cbAtomList, cbfAtomList, cbfAtomList1, cbfAtomList2, cbfAtomList3, connectedCbfs) = classifyBenzeneCarbons(copyGroup)
 
-        print "cbf1", cbfAtomList1
-        print "cbf2", cbfAtomList2
-        print "cbf3", cbfAtomList3
-
         """
         #Step 2. Partner up each Cbf1 and Cbf2 atom
 
@@ -1499,7 +1494,6 @@ class Group(Graph):
                     if atom2 in partners: continue
                     elif bond12.isBenzene():
                         hasSingle = [True if bond23.isSingle() else False for bond23 in atom2.bonds.values()]
-                        # print "potentialPartner", atom2, hasSingle
                         if not True in hasSingle:
                             potentialPartner= atom2
                 #Make a Cb atom the partner, now marking it as a Cbfatom
@@ -1508,20 +1502,12 @@ class Group(Graph):
                     partners[potentialPartner]= cbfAtom
                 #otherwise create a new atom to be the partner
                 else:
-                    print "make new group at cbf1 partner step"
                     (copyGroup, newAtom) = addBenzeneAtomToGroup(copyGroup, cbfAtom, True)
                     partners[cbfAtom] = newAtom
                     partners[newAtom] = cbfAtom
 
         #reclassify all atoms since we may have added new ones
         (cbAtomList, cbfAtomList, cbfAtomList1, cbfAtomList2, cbfAtomList3, connectedCbfs) = classifyBenzeneCarbons(copyGroup, partners)
-
-        print "group after partners cb1", copyGroup.atoms
-        print "partners after cb1", partners
-        print "cbf after partners cb1", cbfAtomList
-        print "cbf1 after partners cb1", cbfAtomList1
-        print "cbf2 after partners cb1", cbfAtomList2
-        print "cbf3 after partners cb1", cbfAtomList3
 
         #Partner up leftover cbfAtom2
         cbf2CheckList = [True if cbfAtom in partners else False for cbfAtom in cbfAtomList2]
@@ -1549,23 +1535,6 @@ class Group(Graph):
                         #and we will eventually figure it out as we knock out other options
             cbf2CheckList = [True if cbfAtom in partners else False for cbfAtom in cbfAtomList2]
 
-        print "partners after cbf2", partners
-        print "cbf after partners cb2", cbfAtomList
-        print "cbf1 after partners cbf2", cbfAtomList1
-        print "cbf2 after partners cbf2", cbfAtomList2
-        print "cbf3 after partners cbf2", cbfAtomList3
-
-        #debug lines everything should have a partner now
-        for cbfAtom in cbfAtomList1+cbfAtomList2:
-            # print cbfAtom
-            assert(cbfAtom in partners)
-            if not partners[cbfAtom] in cbfAtomList3:
-                assert cbfAtom is partners[partners[cbfAtom]]
-
-        #I think this is now redundat....but not sure
-        #It is impossible to have more an odd number of cbf atoms
-        if len(cbfAtomList)%2 == 1: raise Exception("Should be even number of Cbf atoms at this point")
-
         """
         Step 3. Sort all lists by connectivity
 
@@ -1588,8 +1557,6 @@ class Group(Graph):
         in the list. The first and last atom of the list will also be bonded together.
         """
         rings=[cycle for cycle in copyGroup.getAllCyclesOfSize(6) if Group(atoms = cycle).isAromaticRing()]
-
-        print "rings when first initialized", len(rings), rings
 
         """
         Step 5. Add Cbf3 atoms to the correct rings
@@ -1617,17 +1584,13 @@ class Group(Graph):
                     #Next try to merge the ringseed into rings
                     mergeRing = mergeOverlappingBenzeneRings(ring2, ring1, 2)
                     if mergeRing:
-                        print index1, index
                         mergeRingDict[index] = mergeRing
                         break
                 #otherwise add this ringSeed because it represents a completely new ring
                 else: rings.append(ring1)
                 #if we merged a ring, we need to remove the old ring from rings and add the merged ring
                 rings = [rings[index] if not index in mergeRingDict else mergeRingDict[index] for index in range(len(rings))]
-                print "rings after iteration of cbf add ringSeeds", rings
 
-
-        print "rings after initial cbf3 handle", len(rings), rings
         """
         Step 6. Add Cbf2 atoms to the correct rings
 
@@ -1653,7 +1616,6 @@ class Group(Graph):
                     if atom2 not in connectedCbfs[cbfAtom]:
                         newRingSeeds[1].append(atom2)
                         break
-            print "new ringSeeds in cbf2", newRingSeeds
             #Check for duplicates, merge or create new rings
             # rings = addRingseedsToRings(rings, newRingSeeds, 2)
             for index1, ring1 in enumerate(newRingSeeds):
@@ -1664,32 +1626,26 @@ class Group(Graph):
                     #Next try to merge the ringseed into rings
                     mergeRing = mergeOverlappingBenzeneRings(ring2, ring1, 2)
                     if mergeRing:
-                        print index1, index
                         mergeRingDict[index] = mergeRing
                         break
                 #otherwise add this ringSeed because it represents a completely new ring
                 else: rings.append(ring1)
                 #if we merged a ring, we need to remove the old ring from rings and add the merged ring
                 rings = [rings[index] if not index in mergeRingDict else mergeRingDict[index] for index in range(len(rings))]
-                print "rings after iteration of cbf add ringSeeds", rings
 
-        print "rings after cbf2 handle", len(rings), rings
         """
         Step 7. Add Cbf1 atoms to the correct rings
 
         Every Cbf1 atom is in two rings with its partner. In this step, we add this ring seed
         twice to the rings.
         """
-        print "new cbf1 atoms", cbfAtomList1
         for cbfAtom in cbfAtomList1:
             newRingSeed = [partners[cbfAtom], cbfAtom]
             inRing = 0
             #check to see if duplicate of an existing ring
             for ring in rings:
-                print ring
                 if checkSet(ring, newRingSeed):
                     inRing +=1
-                    print "already in Ring", inRing
             #move on to next cbfAtom if we found two rings
             if inRing ==2: continue
             #try to merge into existing rings, if cbf1 is connected
@@ -1698,7 +1654,6 @@ class Group(Graph):
                 mergeRing = mergeOverlappingBenzeneRings(ring, newRingSeed, 1)
                 if mergeRing:
                     inRing+=1
-                    print "merged into Ring", inRing
                     mergeRingDict[index]=mergeRing
                     #move on to next cbfAtom if we found two rings
                     if inRing ==2: break
@@ -1707,10 +1662,7 @@ class Group(Graph):
             #if we still dont have two ring, we create a completely new ring
             if inRing < 2:
                 for x in range(2-inRing):
-                    print "add new Ring", inRing
                     rings.append(copy(newRingSeed))
-
-        print "rings after cbf1 handle", len(rings), rings
 
         """
         Step 8. Add Cb atoms to the correct rings
@@ -1739,8 +1691,6 @@ class Group(Graph):
             if inRing == 0:
                 rings.append([cbAtom])
 
-        print "rings after cb handle", len(rings), rings
-
         """
         Step 9. Grow each partial ring up to six carbon atoms
 
@@ -1760,11 +1710,6 @@ class Group(Graph):
                 if x == carbonsToGrow -1:
                     newBond = GroupBond(ring[0], newAtom, order=['B'])
                     copyGroup.addBond(newBond)
-
-        #Replace elements in rings for debugging
-        for index in range(len(rings)):
-            rings[index].extend(mergedRingDict[index])
-        print "grown rings", len(rings), rings
 
         return copyGroup
 
