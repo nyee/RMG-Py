@@ -1254,12 +1254,19 @@ class Group(Graph):
 
         This method currently does not if there are wildcards in atomtypes or bond orders
         The current algorithm also requires that all Cb and Cbf are atomtyped
+
+        There are other cases where the algorithm doesn't work. For example whenever there
+        are many dangling Cb or Cbf atoms not in a ring, it is likely fail. In the database test
+        (the only use thus far), we will require that any group with more than 3 Cbfs have
+        complete rings. This is much stricter than this method can handle, but right now
+        this method cannot handle very general cases, so it is better to be conservative. 
         """
 
-        def classifyBenzeneCarbons(group):
+        def classifyBenzeneCarbons(group, partners = []):
             """
             Args:
                 group: :class:Group with atoms to classify
+                partners: dictionary of partnered up atoms, which must be a cbf atom
 
             Returns: tuple with lists of each atom classification
             """
@@ -1272,10 +1279,12 @@ class Group(Graph):
 
             #Only want to work with benzene bonds on carbon
             labelsOfCarbonAtomTypes = [x.label for x in atomTypes['C'].specific] + ['C']
+            #Also allow with R!H and some nitrogen groups
+            labelsOfCarbonAtomTypes.extend(['R!H', 'N5b', 'N3b'])
 
             for atom in group.atoms:
                 if not atom.atomType[0].label in labelsOfCarbonAtomTypes: continue
-                elif atom.atomType[0].label == 'Cb':
+                elif atom.atomType[0].label in ['Cb', 'N3b']: #Make Cb and N3b into normal cb atoms
                     cbAtomList.append(atom)
                 elif atom.atomType[0].label == 'Cbf':
                     cbfAtomList.append(atom)
@@ -1298,12 +1307,67 @@ class Group(Graph):
                 elif fbBonds == 2: cbfAtomList2.append(cbfAtom)
                 elif fbBonds == 3: cbfAtomList3.append(cbfAtom)
 
+            #partnered atoms must be cbf1 if it has made it here
+            for cbfAtom in partners:
+                if cbfAtom in cbAtomList:
+                    cbAtomList.remove(cbfAtom)
+                    cbfAtomList.append(cbfAtom)
+                    cbfAtomList1.append(cbfAtom)
+
             #check that cbfAtoms only have benzene bonds
             for cbfAtom in cbfAtomList:
                 for atom2, bond12 in cbfAtom.bonds.iteritems():
                     assert bond12.isBenzene(), "Cbf atom in {0} has a bond with an order other than 'B'".format(group)
 
             return (cbAtomList, cbfAtomList, cbfAtomList1, cbfAtomList2, cbfAtomList3, connectedCbfs)
+
+        def addBenzeneAtomToGroup(group, connectingAtom, cbf=False):
+            """
+            This function adds a benzene atom to the group
+
+            Args:
+                group: :class:Group that we want to add a benzene atom to
+                connectingAtom: :class:GroupAtom that is connected to the new benzene atom
+                cbf: boolean indicating if the new atom should be a cbf
+            Returns: a tuple containing the modified group and the new atom
+
+            """
+            newAtom = None
+            if cbf:
+                newAtom = GroupAtom(atomType=[atomTypes['Cbf']], radicalElectrons=[0], charge=[], label='', lonePairs=None)
+            else:
+                newAtom = GroupAtom(atomType=[atomTypes['Cb']], radicalElectrons=[0], charge=[], label='', lonePairs=None)
+            newBond = GroupBond(connectingAtom, newAtom, order=['B'])
+            group.addAtom(newAtom)
+            group.addBond(newBond)
+
+            return (group, newAtom)
+
+        def sortByConnectivity(atomList):
+            """
+            Args:
+                atomList: input list of atoms
+
+            Returns: a sorted list of atoms where each atom is connected to a previous
+            atom in the list if possible
+            """
+            sortedAtomList=[]
+            # print sortedAtomList, type(sortedAtomList)
+            while atomList:
+                sortedAtomList.append(atomList.pop(0))
+                previousLength = len(sortedAtomList)
+                for atom1 in atomList:
+                    added = False
+                    for atom2, bond12 in atom1.bonds.iteritems():
+                        if atom2 in sortedAtomList:
+                            sortedAtomList.append(atom1)
+                            added = True
+                            break
+                    if added : continue
+                for atom1 in sortedAtomList[previousLength:]:
+                    atomList.remove(atom1)
+
+            return sortedAtomList
 
         def checkSet(superList, subList):
             """
@@ -1323,26 +1387,25 @@ class Group(Graph):
             The input arguements of rings are always in the order that the atoms appear
             inside the ring. That is, each atom is connected to the ones adjacent on the
             list.
-            
+
             Args:
                 ring1: list of :class:GroupAtoms representing first partial ring to merge
                 ring2: list :class:GroupAtoms representing second partial ring to merge
                 od: in for overlap distance
 
             This function tries to see if the beginning or ends of each list have the
-            same atom objects, i.e the two part rings should be merged together. 
-            
-            Returns: If rings are mergable, returns a new list of the merged ring, otherwise 
+            same atom objects, i.e the two part rings should be merged together.
+
+            Returns: If rings are mergable, returns a new list of the merged ring, otherwise
             an empty list
 
             """
-
             newRing = []
             #ring already complete
             if len(ring1) ==6 or len(ring2) == 6: return newRing
 
             #start of ring1 matches end of ring2
-            matchList1 = [x1 is x2 for x1,x2 in zip(ring1[od:],ring2[:od])]
+            matchList1 = [x1 is x2 for x1,x2 in zip(ring1[-od:],ring2[:od])]
             #end of ring1 matches end of ring2
             matchList2 = [x1 is x2 for x1,x2 in zip(ring1[-od:],ring2[:od-1:-1])]
             #start of ring1 matches end of ring2
@@ -1385,51 +1448,6 @@ class Group(Graph):
 
             return mergedRing
 
-        def sequenceInList(sequence, superList):
-            """
-            Returns True if the every item in sequence is in superList with preserved order
-
-            For example, sequence = [1,2,3], superList [5,6,1,2,3] returns True,
-            but sequence = [1,2,3] superList = [6,2,1,3,5]
-            """
-
-            for index1, item1 in enumerate(superList):
-                if item1 is sequence[0]:
-                    for index2 in range(len(sequence)):
-                        if len(superList) > index1+index2:
-                            if not superList[index1+index2] is sequence[index2]:
-                                break
-                        else: break
-                    else: return True
-
-            return False
-
-        def sortByConnectivity(atomList):
-            """
-            Args:
-                atomList: input list of atoms
-
-            Returns: a sorted list of atoms where each atom is connected to a previous
-            atom in the list if possible
-            """
-            sortedAtomList=[]
-            # print sortedAtomList, type(sortedAtomList)
-            while atomList:
-                sortedAtomList.append(atomList.pop(0))
-                previousLength = len(sortedAtomList)
-                for atom1 in atomList:
-                    added = False
-                    for atom2, bond12 in atom1.bonds.iteritems():
-                        if atom2 in sortedAtomList:
-                            sortedAtomList.append(atom1)
-                            added = True
-                            break
-                    if added : continue
-                for atom1 in sortedAtomList[previousLength:]:
-                    atomList.remove(atom1)
-
-            return sortedAtomList
-
         #######################################################################################
         #start of main algorithm
         copyGroup = deepcopy(self)
@@ -1471,7 +1489,7 @@ class Group(Graph):
         for cbfAtom in cbfAtomList1:
             if cbfAtom in partners: continue
             #if cbfAtom has a connected cbf it must be the partner
-            elif connectedCbfs[cbfAtom]:
+            elif connectedCbfs[cbfAtom] and connectedCbfs[cbfAtom][0] not in partners:
                 partners[cbfAtom] = connectedCbfs[cbfAtom][0]
                 if connectedCbfs[cbfAtom][0] not in cbfAtomList3:
                     partners[connectedCbfs[cbfAtom][0]] = cbfAtom
@@ -1490,17 +1508,17 @@ class Group(Graph):
                     partners[potentialPartner]= cbfAtom
                 #otherwise create a new atom to be the partner
                 else:
-                    newAtom = GroupAtom(atomType=[atomTypes['C']], radicalElectrons=[0], charge=[], label='', lonePairs=None)
-                    newBond = GroupBond(cbfAtom, newAtom, order=['B'])
-                    copyGroup.addAtom(newAtom)
-                    copyGroup.addBond(newBond)
+                    print "make new group at cbf1 partner step"
+                    (copyGroup, newAtom) = addBenzeneAtomToGroup(copyGroup, cbfAtom, True)
                     partners[cbfAtom] = newAtom
                     partners[newAtom] = cbfAtom
 
         #reclassify all atoms since we may have added new ones
-        (cbAtomList, cbfAtomList, cbfAtomList1, cbfAtomList2, cbfAtomList3, connectedCbfs) = classifyBenzeneCarbons(copyGroup)
+        (cbAtomList, cbfAtomList, cbfAtomList1, cbfAtomList2, cbfAtomList3, connectedCbfs) = classifyBenzeneCarbons(copyGroup, partners)
 
+        print "group after partners cb1", copyGroup.atoms
         print "partners after cb1", partners
+        print "cbf after partners cb1", cbfAtomList
         print "cbf1 after partners cb1", cbfAtomList1
         print "cbf2 after partners cb1", cbfAtomList2
         print "cbf3 after partners cb1", cbfAtomList3
@@ -1532,6 +1550,10 @@ class Group(Graph):
             cbf2CheckList = [True if cbfAtom in partners else False for cbfAtom in cbfAtomList2]
 
         print "partners after cbf2", partners
+        print "cbf after partners cb2", cbfAtomList
+        print "cbf1 after partners cbf2", cbfAtomList1
+        print "cbf2 after partners cbf2", cbfAtomList2
+        print "cbf3 after partners cbf2", cbfAtomList3
 
         #debug lines everything should have a partner now
         for cbfAtom in cbfAtomList1+cbfAtomList2:
@@ -1585,8 +1607,9 @@ class Group(Graph):
             newRingSeeds = [[ligands[0], cbfAtom, ligands[1]],
                             [ligands[0], cbfAtom, ligands[2]],
                             [ligands[1], cbfAtom, ligands[2]]]
-            #This for loop is to merge the ringSeeds into already present rings
-            for ring1 in newRingSeeds:
+            #Check for duplicates, merge or create new rings
+            # rings = addRingseedsToRings(rings, newRingSeeds, 2)
+            for index1, ring1 in enumerate(newRingSeeds):
                 mergeRingDict={}
                 for index, ring2 in enumerate(rings):
                     #check if a duplicate of a fully created ring
@@ -1594,13 +1617,15 @@ class Group(Graph):
                     #Next try to merge the ringseed into rings
                     mergeRing = mergeOverlappingBenzeneRings(ring2, ring1, 2)
                     if mergeRing:
+                        print index1, index
                         mergeRingDict[index] = mergeRing
                         break
                 #otherwise add this ringSeed because it represents a completely new ring
-                else:
-                    ringsToAdd.append(ring1)
+                else: rings.append(ring1)
                 #if we merged a ring, we need to remove the old ring from rings and add the merged ring
                 rings = [rings[index] if not index in mergeRingDict else mergeRingDict[index] for index in range(len(rings))]
+                print "rings after iteration of cbf add ringSeeds", rings
+
 
         print "rings after initial cbf3 handle", len(rings), rings
         """
@@ -1612,7 +1637,6 @@ class Group(Graph):
         in the last ring seed if it is not available.
         """
         for cbfAtom in cbfAtomList2:
-            otherCbf = None
             if connectedCbfs[cbfAtom][0] is partners[cbfAtom]: otherCbf = connectedCbfs[cbfAtom][1]
             else: otherCbf = connectedCbfs[cbfAtom][0]
             #These two ring seeds represent the two unique rings
@@ -1621,11 +1645,7 @@ class Group(Graph):
             allLigands = cbfAtom.bonds.keys()
             #add a new cb atom to the second newRing seed
             if len(allLigands) == 2:
-                newAtom = GroupAtom(atomType=[atomTypes['C']], radicalElectrons=[0], charge=[], label='', lonePairs=None)
-                newBond = GroupBond(cbfAtom, newAtom, order=['B'])
-                copyGroup.addAtom(newAtom)
-                copyGroup.addBond(newBond)
-                cbAtomList.append(newAtom)
+                (copyGroup, newAtom) = addBenzeneAtomToGroup(copyGroup, cbfAtom)
                 newRingSeeds[1].append(newAtom)
             #join the existing atom to the ringSeed
             elif len(allLigands) == 3:
@@ -1633,8 +1653,10 @@ class Group(Graph):
                     if atom2 not in connectedCbfs[cbfAtom]:
                         newRingSeeds[1].append(atom2)
                         break
-            #This for loop is to merge the ringSeeds into already present rings
-            for ring1 in newRingSeeds:
+            print "new ringSeeds in cbf2", newRingSeeds
+            #Check for duplicates, merge or create new rings
+            # rings = addRingseedsToRings(rings, newRingSeeds, 2)
+            for index1, ring1 in enumerate(newRingSeeds):
                 mergeRingDict={}
                 for index, ring2 in enumerate(rings):
                     #check if a duplicate of a fully created ring
@@ -1642,12 +1664,14 @@ class Group(Graph):
                     #Next try to merge the ringseed into rings
                     mergeRing = mergeOverlappingBenzeneRings(ring2, ring1, 2)
                     if mergeRing:
+                        print index1, index
                         mergeRingDict[index] = mergeRing
                         break
                 #otherwise add this ringSeed because it represents a completely new ring
                 else: rings.append(ring1)
                 #if we merged a ring, we need to remove the old ring from rings and add the merged ring
                 rings = [rings[index] if not index in mergeRingDict else mergeRingDict[index] for index in range(len(rings))]
+                print "rings after iteration of cbf add ringSeeds", rings
 
         print "rings after cbf2 handle", len(rings), rings
         """
@@ -1662,6 +1686,7 @@ class Group(Graph):
             inRing = 0
             #check to see if duplicate of an existing ring
             for ring in rings:
+                print ring
                 if checkSet(ring, newRingSeed):
                     inRing +=1
                     print "already in Ring", inRing
@@ -1729,10 +1754,7 @@ class Group(Graph):
                 if x ==0: lastAtom = ring[-1]
                 else: lastAtom = mergedRingDict[index][-1]
                 #add a new atom to the ring and the group
-                newAtom = GroupAtom(atomType=[atomTypes['C']], radicalElectrons=[0], charge=[], label='', lonePairs=None)
-                newBond = GroupBond(lastAtom, newAtom, order=['B'])
-                copyGroup.addAtom(newAtom)
-                copyGroup.addBond(newBond)
+                (copyGroup, newAtom) = addBenzeneAtomToGroup(copyGroup, lastAtom)
                 mergedRingDict[index].append(newAtom)
                 #At the end attach to the other endpoint
                 if x == carbonsToGrow -1:

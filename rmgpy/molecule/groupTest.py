@@ -649,35 +649,22 @@ class TestGroup(unittest.TestCase):
 
         #tests that it can make a napthalene like structure from general atoms
         adjlist4 = """
-1  *1 O u0 p2 c0 {2,S}
-2     Cs u0 p0 c0 {1,S} {3,B} {8,B}
-3     Cd u0 p0 c0 {2,B} {4,B} {5,B}
-4     Cdd u0 p0 c0 {3,B}
-5     Cbf u0 p0 c0 {3,B} {6,B}
-6     CS u0 p0 c0 {5,B} {7,B}
-7     Ct u0 p0 c0 {6,B} {8,B}
-8     C u0 p0 c0 {2,B} {7,B}
-            """
-        adjlist5 = """
 1  *1 Cbf u0 p2 c0 {2,B}
-2     Cbf u0 p0 c0 {1,B} {3,B}
-3     Cbf u0 p0 c0 {2,B}
+2  *2 Cbf u0 p0 c0 {1,B} {3,B}
+3  *3 Cbf u0 p0 c0 {2,B}
+    """
+        #test handling of heteroatoms and wildcards
+        adjlist5 = """
+1 *1 Cbf u0 {2,B} {3,B} {4,B}
+2    R!H u0 {1,B}
+3    R!H u0 {1,B}
+4    R!H u0 {1,B}
     """
         adjlist6 = """
 1  *1 Cbf u0 p2 c0 {2,B}
-2     Cbf u0 p0 c0 {1,B} {3,B} {4,B}
-3     Cbf u0 p0 c0 {2,B}
-4     Cbf u0 p0 c0 {2,B}
-    """
-
-        adjlist7 = """
-1  *1 Cbf u0 p2 c0 {2,B}
-2     Cbf u0 p0 c0 {1,B} {3,B} {4,B}
-3     Cbf u0 p0 c0 {2,B} {6,B}
-4     Cbf u0 p0 c0 {2,B} {5,B}
-5     Cb u0 p0 c0 {4,B} {7,S}
-6     Cb u0 p0 c0 {3,B}
-7     O u0 p0 c0 {5,S}
+2  *2 Cb u0 p0 c0 {1,B} {3,B}
+3  *3 Cb u0 p0 c0 {2,B} {4,S}
+4  *4 O u0 p0 c0 {3,S}
     """
 
         benzene ="""
@@ -747,20 +734,31 @@ class TestGroup(unittest.TestCase):
 13    C   u0 {12,B} {14,B}
 14    C   u0 {4,B} {13,B}
     """
-        phenalene = """
-1  *1 Cbf u0 p2 c0 {2,B} {7,B} {10,B}
-2     Cbf u0 p0 c0 {1,B} {3,B} {4,B}
-3     Cbf u0 p0 c0 {2,B} {5,B} {13,B}
-4     Cbf u0 p0 c0 {2,B} {8,B} {11,B}
-5     C   u0 {3,B} {6,B}
-6     C   u0 {5,B} {7,B}
-7     C   u0 {1,B} {6,B}
-8     C   u0 {4,B} {9,B}
-9     C   u0 {8,B} {10,B}
-10    C   u0 {1,B} {9,B}
-11    C   u0 {4,B} {12,B}
-12    C   u0 {11,B} {13,B}
-13    C   u0 {3,B} {12,B}
+
+        answer5 = """
+1  *1 Cbf u0 {2,B} {3,B} {4,B}
+2     R!H u0 {1,B} {5,B}
+3     R!H u0 {1,B} {7,B} {10,B}
+4     R!H u0 {1,B} {8,B}
+5     Cb  u0 {2,B} {6,B}
+6     Cb  u0 {5,B} {7,B}
+7     Cb  u0 {3,B} {6,B}
+8     Cb  u0 {4,B} {9,B}
+9     Cb  u0 {8,B} {10,B}
+10    Cb  u0 {3,B} {9,B}
+"""
+        answer6="""
+1  *1 Cbf u0 p2 c0 {2,B} {5,B} {8,B}
+2  *2 Cb  u0 p0 c0 {1,B} {3,B} {11,B}
+3  *3 Cb  u0 p0 c0 {2,B} {4,S} {7,B}
+4  *4 O   u0 p0 c0 {3,S}
+5     Cb  u0 {1,B} {6,B}
+6     Cb  u0 {5,B} {7,B}
+7     Cb  u0 {3,B} {6,B}
+8     Cb  u0 {1,B} {9,B}
+9     Cb  u0 {8,B} {10,B}
+10    Cb  u0 {9,B} {11,B}
+11    Cb  u0 {2,B} {10,B}
 """
 
         group1 = Group().fromAdjacencyList(adjlist1)
@@ -769,29 +767,27 @@ class TestGroup(unittest.TestCase):
         group4 = Group().fromAdjacencyList(adjlist4)
         group5 = Group().fromAdjacencyList(adjlist5)
         group6 = Group().fromAdjacencyList(adjlist6)
-        group7 = Group().fromAdjacencyList(adjlist7)
 
         benzeneGroup = Group().fromAdjacencyList(benzene)
         biphenylGroup = Group().fromAdjacencyList(biphenyl)
         naphthaleneGroup = Group().fromAdjacencyList(naphthalene)
         subnaphthaleneGroup = Group().fromAdjacencyList(subnaphthalene)
         phenanthreneGroup = Group().fromAdjacencyList(phenanthrene)
-        phenaleneGroup = Group().fromAdjacencyList(phenalene)
+        answer5 = Group().fromAdjacencyList(answer5)
+        answer6 = Group().fromAdjacencyList(answer6)
 
-        # group1 = group1.addImplicitBenzene()
-        # self.assertTrue(benzeneGroup.isIsomorphic(group1))
-        # group2 = group2.addImplicitBenzene()
-        # self.assertTrue(biphenylGroup.isIsomorphic(group2))
-        # group3 = group3.addImplicitBenzene()
-        # self.assertTrue(naphthaleneGroup.isIsomorphic(group3))
-        # group4 = group4.addImplicitBenzene()
-        # self.assertTrue(subnaphthaleneGroup.isIsomorphic(group4))
-        # group5 = group5.addImplicitBenzene()
-        # self.assertTrue(phenanthreneGroup.isIsomorphic(group5))
-        # group6 = group6.addImplicitBenzene()
-        # self.assertTrue(phenaleneGroup.isIsomorphic(group6))
-        group7 = group7.addImplicitBenzene()
-        print group7.toAdjacencyList()
+        group1 = group1.addImplicitBenzene()
+        self.assertTrue(benzeneGroup.isIsomorphic(group1))
+        group2 = group2.addImplicitBenzene()
+        self.assertTrue(biphenylGroup.isIsomorphic(group2))
+        group3 = group3.addImplicitBenzene()
+        self.assertTrue(naphthaleneGroup.isIsomorphic(group3))
+        group4 = group4.addImplicitBenzene()
+        self.assertTrue(phenanthreneGroup.isIsomorphic(group4))
+        group5 = group5.addImplicitBenzene()
+        self.assertTrue(answer5.isIsomorphic(group5))
+        group6 = group6.addImplicitBenzene()
+        self.assertTrue(answer6.isIsomorphic(group6))
 
     def testMakeSampleMolecule(self):
         """
