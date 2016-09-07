@@ -1250,21 +1250,18 @@ class Group(Graph):
 
     def addImplicitBenzene(self):
         """
-        Returns: A modified group with any benzene rings added
+        Returns: A modified group with any implicit benzene rings added
 
-        Not designed to work with wildcards
-
-        Unlikely to work with any fused aromatics larger than napthalene
+        This method currently does not if there are wildcards in atomtypes or bond orders
+        The current algorithm also requires that all Cb and Cbf are atomtyped
         """
 
         def classifyBenzeneCarbons(group):
             """
-
             Args:
                 group: :class:Group with atoms to classify
 
             Returns: tuple with lists of each atom classification
-
             """
             cbAtomList = []
             cbfAtomList = [] #All Cbf Atoms
@@ -1320,7 +1317,6 @@ class Group(Graph):
             superSet = set(superList)
             subSet = set(subList)
             return superSet.issuperset(subSet)
-        ######################################################################################
 
         def mergeOverlappingBenzeneRings(ring1, ring2, od):
             """
@@ -1363,7 +1359,6 @@ class Group(Graph):
                 newRing = ring2[:od-1:-1] + ring1
 
             return newRing
-        ######################################################################################
 
         def addCbAtomToRing(ring, cbAtom):
             """
@@ -1408,15 +1403,14 @@ class Group(Graph):
                     else: return True
 
             return False
-        
-        ######################################################################################
+
         def sortByConnectivity(atomList):
             """
             Args:
                 atomList: input list of atoms
 
-            Returns: a sorted list of atoms where each atom is connected to something
-            previous in the list if possible
+            Returns: a sorted list of atoms where each atom is connected to a previous
+            atom in the list if possible
             """
             sortedAtomList=[]
             # print sortedAtomList, type(sortedAtomList)
@@ -1437,20 +1431,43 @@ class Group(Graph):
             return sortedAtomList
 
         #######################################################################################
+        #start of main algorithm
         copyGroup = deepcopy(self)
+        """
+        Step 1. Classify all atoms as Cb, Cbf1, Cbf2, Cbf3, ignoring all non-benzene carbons
 
-        #Step 1. Classify all atoms as Cb, Cbf1, Cbf2, Cbf3, ignoring all non-benzene carbons
+        Every carbon atom in a benzene ring can be defined as one of the following:
+        Cb - benzene carbon in exclusively one ring. Can have one single bond
+        Cbf - general classification for any benzene carbon that connects two fused benzene rings
+        Cbf1 - Cbf that is bonded to exactly one other Cbf, exclusively in two different benzene rings
+        Cbf2 - Cbf that is bonded to exactly two other Cbfs, exclusively in two different benzene ring
+        Cbf3 - Cbf that is bonded to exactly three other Cbfs, exclusively in three different benzene rings
+
+        The dictionary connectedCbfs has a cbf atom as key and the other Cbf atoms it is connected to as values
+        """
         (cbAtomList, cbfAtomList, cbfAtomList1, cbfAtomList2, cbfAtomList3, connectedCbfs) = classifyBenzeneCarbons(copyGroup)
 
         print "cbf1", cbfAtomList1
         print "cbf2", cbfAtomList2
         print "cbf3", cbfAtomList3
 
+        """
         #Step 2. Partner up each Cbf1 and Cbf2 atom
-        #Every Cbf1 and Cbf2 have one exclusive 'partner' Cbf, of which is shares two benzene rings
+
+        For any fused benzene rings, there will always be exactly two Cbf atoms that join the benzne
+        rings. Therefore, we can say that every Cbf1 atom has one 'partner' Cbf atom in which it
+        share lies in two benzene rings with. If you try to draw a couple example PAHs, you'll
+        find that Cbf2 atoms also have one exclusive 'partner', while Cbf3 atoms are actually
+        'partnered' with every atom it is bonded to.
+
+        In this step, we attempt to find the partner for each Cbf1 and Cbf2 atom to make creating
+        the rings easier later. We find (or create) partners for every Cbf1 atom first because
+        they only have one option for a partner, by definition. Cbf2 atoms can be trickier to
+        partner up correctly. However because some are partnered with Cbf1 atoms, we can
+        eventually figure out correct Cbf2/Cbf2 pairs by eliminating the ones partnered
+        with Cbf1 atoms.
+        """
         partners = {} #dictionary of exclusive partners, has 1:2 and 2:1
-        #First parnter up cbf1 atoms because they only have one option for partner
-        #This eliminates choices for the cbf2 atoms
         for cbfAtom in cbfAtomList1:
             if cbfAtom in partners: continue
             #if cbfAtom has a connected cbf it must be the partner
@@ -1467,7 +1484,7 @@ class Group(Graph):
                         # print "potentialPartner", atom2, hasSingle
                         if not True in hasSingle:
                             potentialPartner= atom2
-                #Upgrade a cb atom to a cbf, and make it the partner
+                #Make a Cb atom the partner, now marking it as a Cbfatom
                 if potentialPartner:
                     partners[cbfAtom] = potentialPartner
                     partners[potentialPartner]= cbfAtom
@@ -1489,9 +1506,6 @@ class Group(Graph):
         print "cbf3 after partners cb1", cbfAtomList3
 
         #Partner up leftover cbfAtom2
-        #Because the cbf1 atoms were already there is a partnered "end point" for every
-        #cbf2 chain, therefore we can always eventually partner up each cbf2 by working
-        #inwards
         cbf2CheckList = [True if cbfAtom in partners else False for cbfAtom in cbfAtomList2]
         while False in cbf2CheckList:
             for cbfAtom in cbfAtomList2:
@@ -1504,7 +1518,6 @@ class Group(Graph):
                         break
                     #otherwise we have found the partner if atom2 is not in partners
                     #and the other atom is in partners
-                    #if not both of these are true, we can just skip and come back to this atom later
                     elif not atom2 not in partners:
                         #get the other connected atom
                         other = None
@@ -1514,6 +1527,8 @@ class Group(Graph):
                             partners[cbfAtom] = atom2
                             partners[atom2] = cbfAtom
                             break
+                        #if we are not sure which atom is the partner, we can skip it for now
+                        #and we will eventually figure it out as we knock out other options
             cbf2CheckList = [True if cbfAtom in partners else False for cbfAtom in cbfAtomList2]
 
         print "partners after cbf2", partners
@@ -1529,20 +1544,40 @@ class Group(Graph):
         #It is impossible to have more an odd number of cbf atoms
         if len(cbfAtomList)%2 == 1: raise Exception("Should be even number of Cbf atoms at this point")
 
-        #Step 3. Sort all lists by connectivity
+        """
+        Step 3. Sort all lists by connectivity
+
+        In the coming steps, we will sort Cb/Cbf atom into their benzene rings. If we cannot
+        find a ring to sort an atom into, we will create a new ring containing that atom.
+        It is important that we always check atoms that are already connected to existing rings
+        before completely disconnected atoms. Otherwise, we will erroneously create new rings.
+        """
         cbAtomList = sortByConnectivity(cbAtomList)
         cbfAtomList1 = sortByConnectivity(cbfAtomList1)
         cbfAtomList2 = sortByConnectivity(cbfAtomList2)
         cbfAtomList3 = sortByConnectivity(cbfAtomList3)
 
-        #Step 4. Initalize the list of rings with any benzene rings that are already explicitly stated
-        #list of lists, where eventually each list have all the atoms in a full benzene ring
+        """
+        Step 4. Initalize the list of rings with any benzene rings that are already explicitly stated
+
+        The variable rings is a list of lists. Each list in rings represents one full benzene rings,
+        so it will eventually have six benzene carbons in it. Each ring's list will have the atoms
+        sorted by connectivity, such that any atom is bonded to the atoms preceding and following it
+        in the list. The first and last atom of the list will also be bonded together.
+        """
         rings=[cycle for cycle in copyGroup.getAllCyclesOfSize(6) if Group(atoms = cycle).isAromaticRing()]
 
         print "rings when first initialized", len(rings), rings
 
-        #Step 5. Add cbf3 atoms to the correct rings
-        #every cbf3 atom is part of three different rings, but we don't want to make duplicates
+        """
+        Step 5. Add Cbf3 atoms to the correct rings
+
+        Every Cbf3 atom is part of three different rings. These three rings can be defined by
+        three-membered combinations of ligand1-Cbf3atom-ligand2, where the ligands are any
+        unique atom connected to the Cbf3 atom. In this step, we start with 'ring seeds' of
+        the three-membered combinations and try to merge them into existing rings. If no
+        suitable ring is found, we create a new ring from the ring seed.
+        """
         for cbfAtom in cbfAtomList3:
             ringsToAdd = []
             ligands = cbfAtom.bonds.keys() #should always have 3 ligands
@@ -1552,7 +1587,6 @@ class Group(Graph):
                             [ligands[1], cbfAtom, ligands[2]]]
             #This for loop is to merge the ringSeeds into already present rings
             for ring1 in newRingSeeds:
-                mergeRing = []
                 mergeRingDict={}
                 for index, ring2 in enumerate(rings):
                     #check if a duplicate of a fully created ring
@@ -1569,9 +1603,14 @@ class Group(Graph):
                 rings = [rings[index] if not index in mergeRingDict else mergeRingDict[index] for index in range(len(rings))]
 
         print "rings after initial cbf3 handle", len(rings), rings
+        """
+        Step 6. Add Cbf2 atoms to the correct rings
 
-        #Step 6. Add cbf2 atoms to the correct rings
-        #every cbf2 atom is part of two different rings (shared with its partner)
+        Every Cbf2 atom is in two rings with unique ring seeds defined by
+        partneredCbf-Cbf2atom-otherCbf and partneredCbf-Cbf2Atom-CbAtom. This step is
+        almost analogous to the last step, except we may need to create the Cbatom
+        in the last ring seed if it is not available.
+        """
         for cbfAtom in cbfAtomList2:
             otherCbf = None
             if connectedCbfs[cbfAtom][0] is partners[cbfAtom]: otherCbf = connectedCbfs[cbfAtom][1]
@@ -1596,7 +1635,6 @@ class Group(Graph):
                         break
             #This for loop is to merge the ringSeeds into already present rings
             for ring1 in newRingSeeds:
-                mergeRing = []
                 mergeRingDict={}
                 for index, ring2 in enumerate(rings):
                     #check if a duplicate of a fully created ring
@@ -1604,8 +1642,6 @@ class Group(Graph):
                     #Next try to merge the ringseed into rings
                     mergeRing = mergeOverlappingBenzeneRings(ring2, ring1, 2)
                     if mergeRing:
-                        #make sure the partner atom is always before the other atom
-                        if not sequenceInList(ring1, mergeRing): mergeRing.reverse()
                         mergeRingDict[index] = mergeRing
                         break
                 #otherwise add this ringSeed because it represents a completely new ring
@@ -1614,8 +1650,12 @@ class Group(Graph):
                 rings = [rings[index] if not index in mergeRingDict else mergeRingDict[index] for index in range(len(rings))]
 
         print "rings after cbf2 handle", len(rings), rings
+        """
+        Step 7. Add Cbf1 atoms to the correct rings
 
-        #Step 7. Add cbf1 atoms to the correct rings
+        Every Cbf1 atom is in two rings with its partner. In this step, we add this ring seed
+        twice to the rings.
+        """
         print "new cbf1 atoms", cbfAtomList1
         for cbfAtom in cbfAtomList1:
             newRingSeed = [partners[cbfAtom], cbfAtom]
@@ -1647,8 +1687,12 @@ class Group(Graph):
 
         print "rings after cbf1 handle", len(rings), rings
 
+        """
+        Step 8. Add Cb atoms to the correct rings
 
-        #Step 8. Add cb atoms to the correct rings
+        Each Cb atom is part of exactly one benzene ring. In this step we merge or make
+        a new ring for each Cb atom.
+        """
         for cbAtom in cbAtomList:
             inRing = 0
             #check to see if already in a ring
@@ -1672,7 +1716,11 @@ class Group(Graph):
 
         print "rings after cb handle", len(rings), rings
 
-        #Step 9. Grow each partial ring up to 6 carbon atoms
+        """
+        Step 9. Grow each partial ring up to six carbon atoms
+
+        In this step we create new Cb atoms and add them to any rings which do not have 6 atoms.
+        """
         mergedRingDict={}
         for index, ring in enumerate(rings):
             carbonsToGrow = 6-len(ring)
@@ -1691,7 +1739,7 @@ class Group(Graph):
                     newBond = GroupBond(ring[0], newAtom, order=['B'])
                     copyGroup.addBond(newBond)
 
-        #debug line
+        #Replace elements in rings for debugging
         for index in range(len(rings)):
             rings[index].extend(mergedRingDict[index])
         print "grown rings", len(rings), rings
