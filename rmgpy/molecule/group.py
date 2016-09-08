@@ -456,28 +456,28 @@ class GroupBond(Edge):
     def isSingle(self):
         """
         Return ``True`` if the bond represents a single bond or ``False`` if
-        not.
+        not. Bonds with any wildcards will return  ``False``.
         """
         return self.order[0] == 'S' and len(self.order) == 1
 
     def isDouble(self):
         """
         Return ``True`` if the bond represents a double bond or ``False`` if
-        not.
+        not. Bonds with any wildcards will return  ``False``.
         """
         return self.order[0] == 'D' and len(self.order) == 1
 
     def isTriple(self):
         """
         Return ``True`` if the bond represents a triple bond or ``False`` if
-        not.
+        not. Bonds with any wildcards will return  ``False``.
         """
         return self.order[0] == 'T' and len(self.order) == 1
 
     def isBenzene(self):
         """
         Return ``True`` if the bond represents a benzene bond or ``False`` if
-        not.
+        not. Bonds with any wildcards will return  ``False``.
         """
         return self.order[0] == 'B' and len(self.order) == 1
 
