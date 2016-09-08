@@ -972,8 +972,10 @@ class Group(Graph):
             allDouble = groupFeatures[1]
             triple = groupFeatures[5]
             benzene = groupFeatures[6]
-
-            bondValency = single + 2 * allDouble + 3 * triple + 4.0/3.0 * benzene
+            if benzene == 3:
+                bondValency = single + 2 * allDouble + 3 * triple + 4.0/3.0 * benzene
+            else:
+                bondValency =  single + 2 * allDouble + 3 * triple + 3.0/2.0 * benzene
             filledValency =  atom.radicalElectrons[0] + bondValency
             # print index, atom, filledValency
 
