@@ -164,3 +164,5 @@ cdef class Group(Graph):
     cpdef Group addImplicitBenzene(self)
 
     cpdef mol.Molecule makeSampleMolecule(self)
+
+    cpdef bint isBenzeneExplicit(self)

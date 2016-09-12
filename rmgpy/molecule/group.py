@@ -1757,3 +1757,83 @@ class Group(Graph):
 
 
         return newMolecule
+
+    def isBenzeneExplicit(self):
+        """
+
+        Returns: 'True' if all Cb, Cbf, Nb, and Nbf atoms are in completely explicitly stated benzene rings.
+
+        Otherwise return 'False'
+
+        """
+        def classifyBenzeneCarbons(group, partners = []):
+            """
+            Args:
+                group: :class:Group with atoms to classify
+                partners: dictionary of partnered up atoms, which must be a cbf atom
+
+            Returns: tuple with lists of each atom classification
+            """
+            cbAtomList = []
+            cbfAtomList = [] #All Cbf Atoms
+            cbfAtomList1 = [] #Cbf Atoms that are bonded to exactly one other Cbf (part of 2 rings)
+            cbfAtomList2 = [] #Cbf that are sandwiched between two other Cbf (part of 2 rings)
+            cbfAtomList3 = [] #Cbf atoms that are sandwiched between three other Cbf atoms (part of 3 rings)
+            connectedCbfs={} #dictionary of connections to other cbfAtoms
+
+            #Only want to work with benzene bonds on carbon
+            labelsOfCarbonAtomTypes = [x.label for x in atomTypes['C'].specific] + ['C']
+            #Also allow with R!H and some nitrogen groups
+            labelsOfCarbonAtomTypes.extend(['R!H', 'N5b', 'N3b'])
+
+            for atom in group.atoms:
+                if not atom.atomType[0].label in labelsOfCarbonAtomTypes: continue
+                elif atom.atomType[0].label in ['Cb', 'N3b']: #Make Cb and N3b into normal cb atoms
+                    cbAtomList.append(atom)
+                elif atom.atomType[0].label == 'Cbf':
+                    cbfAtomList.append(atom)
+                else:
+                    benzeneBonds = 0
+                    for atom2, bond12 in atom.bonds.iteritems():
+                        if bond12.isBenzene(): benzeneBonds+=1
+                    if benzeneBonds > 2: cbfAtomList.append(atom)
+                    elif benzeneBonds >0: cbAtomList.append(atom)
+
+            #further sort the cbf atoms
+            for cbfAtom in cbfAtomList:
+                fbBonds = 0
+                connectedCbfs[cbfAtom] = []
+                for atom2, bond in cbfAtom.bonds.iteritems():
+                    if bond.order[0] == 'B' and atom2 in cbfAtomList:
+                        fbBonds +=1
+                        connectedCbfs[cbfAtom].append(atom2)
+                if fbBonds < 2: cbfAtomList1.append(cbfAtom)
+                elif fbBonds == 2: cbfAtomList2.append(cbfAtom)
+                elif fbBonds == 3: cbfAtomList3.append(cbfAtom)
+
+            #partnered atoms must be cbf1 if it has made it here
+            for cbfAtom in partners:
+                if cbfAtom in cbAtomList:
+                    cbAtomList.remove(cbfAtom)
+                    cbfAtomList.append(cbfAtom)
+                    cbfAtomList1.append(cbfAtom)
+
+            #check that cbfAtoms only have benzene bonds
+            for cbfAtom in cbfAtomList:
+                for atom2, bond12 in cbfAtom.bonds.iteritems():
+                    assert bond12.isBenzene(), "Cbf atom in {0} has a bond with an order other than 'B'".format(group)
+
+            return (cbAtomList, cbfAtomList, cbfAtomList1, cbfAtomList2, cbfAtomList3, connectedCbfs)
+        #######################################################################################
+
+        #classify atoms
+        (cbAtomList, cbfAtomList, cbfAtomList1, cbfAtomList2, cbfAtomList3, connectedCbfs) = classifyBenzeneCarbons(self)
+        #get all explicit carbon rings
+        rings=[cycle for cycle in self.getAllCyclesOfSize(6) if Group(atoms = cycle).isAromaticRing()]
+
+        for atom in cbAtomList+cbfAtomList:
+            inRing = False
+            for ring in rings:
+                if atom in ring: inRing = True
+            if not inRing: return False
+        else: return True
