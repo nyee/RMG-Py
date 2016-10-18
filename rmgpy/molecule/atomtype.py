@@ -498,11 +498,24 @@ def getAtomType(atom, bonds):
                 break
         else: return specificAtomType
     else:
+        #
+        # """
+        # features=[self.single,
+        #           self.allDouble,
+        #           self.rDouble,
+        #           self.oDouble,
+        #           self.sDouble,
+        #           self.triple,
+        #           self.benzene,
+        #           self.lonePairs,]
+        # return features
+        single = molFeatureList[0]
         rDouble = molFeatureList[2]
         oDouble = molFeatureList[3]
         sDouble = molFeatureList[4]
         triple = molFeatureList[5]
         benzene = molFeatureList[6]
+        lonePairs = molFeatureList[7]
 
-        raise AtomTypeError('Unable to determine atom type for atom {0}, which has {1:d} double bonds to C, {2:d} double bonds to O, {3:d} double bonds to S, {4:d} triple bonds, and {5:d} benzene bonds.'.format(atom, rDouble, oDouble, sDouble, triple, benzene))
+        raise AtomTypeError('Unable to determine atom type for atom {0}, which has {1:d} single bonds, {2:d} double bonds to C, {3:d} double bonds to O, {4:d} double bonds to S, {5:d} triple bonds, {6:d} benzene bonds, and {7:d} lone pairs.'.format(atom, single, rDouble, oDouble, sDouble, triple, benzene, lonePairs))
 
