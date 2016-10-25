@@ -6,9 +6,9 @@ import logging
 from external.wip import work_in_progress
 from rmgpy import settings
 from rmgpy.data.rmg import RMGDatabase
-from copy import copy, deepcopy
+from copy import copy
 from rmgpy.data.base import LogicOr
-from rmgpy.molecule import Group
+from rmgpy.molecule import Group, ImplicitBenzeneError
 from rmgpy.molecule.atomtype import atomTypes
 from rmgpy.molecule.pathfinder import find_shortest_path
 
@@ -91,12 +91,12 @@ class TestDatabase():  # cannot inherit from unittest.TestCase if we want to use
                 self.compat_func_name = test_name
                 yield test, family_name
 
-            # this patch of code is commented out till the kinetics database is ready for proper testing
-            # test = lambda x: self.kinetics_checkSampleDescendsToGroup(family_name)
-            # test_name = "Kinetics family {0}: Entry is accessible?".format(family_name)
-            # test.description = test_name
-            # self.compat_func_name = test_name
-            # yield test, family_name
+            if family_name not in difficultFamilies:
+                test = lambda x: self.kinetics_checkSampleDescendsToGroup(family_name)
+                test_name = "Kinetics family {0}: Entry is accessible?".format(family_name)
+                test.description = test_name
+                self.compat_func_name = test_name
+                yield test, family_name
 
             for depository in family.depositories:
 
@@ -638,16 +638,15 @@ The following adjList may have atoms in a different ordering than the input file
             for x in E:
                 s += '\n'+str(x)
             nose.tools.assert_true(False,s)
+
     def kinetics_checkSampleDescendsToGroup(self, family_name):
         """
         This test first creates a sample :class:Molecule from a :class:Group. Then it checks
         that this molecule hits the original group or a child when it descends down the tree.
-        
-        this test is not currently called. It will be used when the kinetics database is fixed
-        to allow for biomolecular reaction finding effectively.
         """
         family = self.database.kinetics.families[family_name]
 
+        #ignore any products
         ignore=[]
         if not family.ownReverse:
             for product in family.forwardTemplate.products:
@@ -655,26 +654,68 @@ The following adjList may have atoms in a different ordering than the input file
                 ignore.extend(product.children)
         else: ignore=[]
 
+        #If family is backbone archetype, then we need to merge groups before descending
+        roots = family.groups.top
+        if len(roots) > len(family.forwardTemplate.reactants):
+            backbone = family.getBackboneRoots()[0]
+            backboneSample = family.getTopLevelGroups(backbone)[0] #pick smallest backbone
+            mergesNecessary = True
+        else: mergesNecessary = False
+
+        #If atom has too many benzene rings, we currently have trouble making sample atoms
+        skipped = []
+
         for entryName, entry in family.groups.entries.iteritems():
-            print entryName
             if entry in ignore: continue
             elif isinstance(entry.item, Group):
-                # print entryName
-                sampleMolecule = entry.item.makeSampleMolecule()
-                atoms = sampleMolecule.getLabeledAtoms()
-                match = family.groups.descendTree(sampleMolecule, atoms, strict=True)
+                print entryName
+                ancestors=family.ancestors(entry)
+                if ancestors: root = ancestors[-1] #top level root will be last one in ancestors
+                else: root = entry
+                try:
+                    if mergesNecessary and root is not backbone: #we may need to merge
+                        mergedGroup = family.mergeGroups(backboneSample.item, entry.item)
+                        sampleMolecule = mergedGroup.makeSampleMolecule()
+                    else:
+                        sampleMolecule = entry.item.makeSampleMolecule()
 
-                assert entry in [match]+family.groups.ancestors(match), """In group {0}, a sample molecule made from node {1} returns node {2} when descending the tree.
+                    #for now ignore sample atoms that use nitrogen types
+                    nitrogen = False
+                    for atom in sampleMolecule.atoms:
+                        if atom.isNitrogen(): nitrogen = True
+                    if nitrogen:
+                        skipped.append(entryName)
+                        continue
+
+                    #test accessibility here
+                    atoms = sampleMolecule.getLabeledAtoms()
+                    match = family.groups.descendTree(sampleMolecule, atoms, strict=True, root = root)
+                    nose.tools.assert_in(entry, [match]+family.groups.ancestors(match), """In group {0}, a sample molecule made from node {1} returns node {2} when descending the tree.
 Sample molecule AdjList:
 {3}
 
 Origin Group AdjList:
-{4}
+{4}{5}{6}
 
 Matched group AdjList:
-{5}
-                                           """.format(family_name, entry, match, sampleMolecule.toAdjacencyList(), entry.item.toAdjacencyList(),match.item.toAdjacencyList())
+{7}
+        """.format(family_name,
+                   entry.label,
+                   match.label,
+                   sampleMolecule.toAdjacencyList(),
+                   entry.item.toAdjacencyList(),
+                   "\n\nBackbone Group Adjlist:\n" + backboneSample.label +'\n' if mergesNecessary and root is not backbone else '',
+                   backboneSample.item.toAdjacencyList() if mergesNecessary and root is not backbone else '',
+                   match.item.toAdjacencyList()))
 
+                except ImplicitBenzeneError:
+                    skipped.append(entryName)
+
+        #print out entries skipped from exception we can't currently handle
+        if skipped:
+            print "These entries were skipped because too big benzene rings or has nitrogen sample atom:"
+            for entryName in skipped:
+                print entryName
 
     def general_checkNodesFoundInTree(self, group_name, group):
         """
@@ -814,7 +855,7 @@ Origin Group AdjList:
 
 Matched group AdjList:
 {5}
-                                           """.format(group_name, entry, match, sampleMolecule.toAdjacencyList(), entry.item.toAdjacencyList(),match.item.toAdjacencyList())
+""".format(group_name, entry, match, sampleMolecule.toAdjacencyList(), entry.item.toAdjacencyList(),match.item.toAdjacencyList())
 
 if __name__ == '__main__':
     nose.run(argv=[__file__, '-v', '--nologcapture'], defaultTest=__name__)
