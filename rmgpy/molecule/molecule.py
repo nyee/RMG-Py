@@ -42,6 +42,7 @@ import re
 import numpy
 import urllib
 from collections import OrderedDict
+from element import PeriodicSystem
 
 import element as elements
 try:
@@ -1552,11 +1553,9 @@ class Molecule(Graph):
                         order = order + 3
                     if bond12.isBenzene():
                         order = order + 1.5
-
-                if atom1.isSilicon() or atom1.isCarbon():
-                    atom1.lonePairs = (4 - atom1.radicalElectrons - int(order)) / 2
-                else:     
-                    atom1.lonePairs = 4 - atom1.radicalElectrons - int(order)
+                atom1.lonePairs = (PeriodicSystem.valence_electrons[atom1.symbol] - atom1.radicalElectrons - int(order)) / 2.0
+                if atom1.lonePairs % 1 > 0:
+                    logging.error("Unable to determine the number of lone pairs for element {0} in {1}".format(atom1,self))
             else:
                 atom1.lonePairs = 0
                 
