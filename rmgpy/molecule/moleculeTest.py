@@ -461,6 +461,57 @@ class TestBond(unittest.TestCase):
         import cPickle
         bond = cPickle.loads(cPickle.dumps(self.bond))
         self.assertEqual(self.bond.order, bond.order)
+
+    def testUpdateLonePairs(self):
+        """
+        Test that updateLonePairs works as expected
+        """
+        mol_N1s = Molecule().fromAdjacencyList("""
+            1 N u0 p2 c0 {2,S}
+            2 H u0 p0 c0 {1,S}
+            """)
+        mol_N3s = Molecule().fromAdjacencyList("""
+            multiplicity 2
+            1 N u1 p1 c0 {2,S} {3,S}
+            2 H u0 p0 c0 {1,S}
+            3 H u0 p0 c0 {1,S}
+            """)
+        mol_N5d = Molecule().fromAdjacencyList("""
+            1 O u0 p2 c0 {2,S} {5,S}
+            2 N u0 p0 c+1 {1,S} {3,S} {4,D}
+            3 O u0 p3 c-1 {2,S}
+            4 O u0 p2 c0 {2,D}
+            5 H u0 p0 c0 {1,S}
+            """)
+        mol_CH2_S = Molecule().fromAdjacencyList("""
+            1 C u0 p1 c0 {2,S} {3,S}
+            2 H u0 p0 c0 {1,S}
+            3 H u0 p0 c0 {1,S}
+            """)
+        mol_carbonyl = Molecule().fromAdjacencyList("""
+            1 C u0 p0 c0 {2,S} {4,S} {5,S} {6,S}
+            2 C u0 p0 c0 {1,S} {3,D} {7,S}
+            3 O u0 p2 c0 {2,D}
+            4 H u0 p0 c0 {1,S}
+            5 H u0 p0 c0 {1,S}
+            6 H u0 p0 c0 {1,S}
+            7 H u0 p0 c0 {2,S}
+            """)
+
+        mol_N1s.updateLonePairs()
+        mol_N3s.updateLonePairs()
+        mol_N5d.updateLonePairs()
+        mol_CH2_S.updateLonePairs()
+        mol_carbonyl.updateLonePairs()
+
+        self.assertEqual(mol_N1s.atoms[0].lonePairs, 2)
+        self.assertEqual(mol_N3s.atoms[0].lonePairs, 1)
+        self.assertEqual(mol_N5d.atoms[0].lonePairs, 2)
+        self.assertEqual(mol_N5d.atoms[1].lonePairs, 0)
+        self.assertEqual(mol_N5d.atoms[2].lonePairs, 3)
+        self.assertEqual(mol_CH2_S.atoms[0].lonePairs, 1)
+        self.assertEqual(mol_carbonyl.atoms[0].lonePairs, 0)
+        self.assertEqual(mol_carbonyl.atoms[2].lonePairs, 2)
         
 ################################################################################
 
