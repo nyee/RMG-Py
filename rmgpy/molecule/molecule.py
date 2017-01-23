@@ -418,9 +418,13 @@ class Atom(Vertex):
             else:
                 order += bond_orders[bond.order]
 
-        if num_B_bond == 3:
+        #bond order depends on atomtype for benzene bonds because a different number of electrons
+        #can participate in the benzene ring
+        if self.atomType is atomTypes['Cbf']:
             order += num_B_bond * 4/3.0
-        else:
+        elif self.atomType is atomTypes['N5b']:
+            order += num_B_bond * 2
+        else: #currently for Cb and N3b
             order += num_B_bond * 3/2.0
 
         return order
