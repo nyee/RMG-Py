@@ -695,6 +695,9 @@ def fromAdjacencyList(adjlist, group=False, saturateH=False):
         if not group:
             Saturator.saturate(atoms)
 
+    for atom in atoms:
+        if atom.atomType is None:
+            atom.atomType = getAtomType(atom, atom.bonds)
     
     # Consistency checks
     if not group:
