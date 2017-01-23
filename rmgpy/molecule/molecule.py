@@ -1549,9 +1549,9 @@ class Molecule(Graph):
             if not atom1.isHydrogen():
                 for atom2, bond12 in atom1.edges.items():
                     order = atom1.getBondOrdersForAtom()
-                if atom1.atomType.label == 'N5b':
-                # should add to the above condition a logical OR for additional heteroatom atomTypes (e.g., oxygen, sulfur) on an aromatic ring that contribute a lone pair to the aromaticity, once they're added to RMG
-                    order = order + 1
+                # if atom1.atomType.label == 'N5b':
+                # # should add to the above condition a logical OR for additional heteroatom atomTypes (e.g., oxygen, sulfur) on an aromatic ring that contribute a lone pair to the aromaticity, once they're added to RMG
+                #     order = order + 1
                 atom1.lonePairs = (elements.PeriodicSystem.valence_electrons[atom1.symbol] - atom1.radicalElectrons - atom1.charge - int(order)) / 2.0
                 if atom1.lonePairs % 1 > 0 or atom1.lonePairs > 4:
                     logging.error("Unable to determine the number of lone pairs for element {0} in {1}".format(atom1,self))
