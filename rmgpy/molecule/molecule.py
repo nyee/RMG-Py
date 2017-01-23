@@ -1544,14 +1544,7 @@ class Molecule(Graph):
             order = 0
             if not atom1.isHydrogen():
                 for atom2, bond12 in atom1.edges.items():
-                    if bond12.isSingle():
-                        order = order + 1
-                    if bond12.isDouble():
-                        order = order + 2
-                    if bond12.isTriple():
-                        order = order + 3
-                    if bond12.isBenzene():
-                        order = order + 1.5
+                    order = atom1.getBondOrdersForAtom()
                 if atom1.atomType.label == 'N5b':
                 # should add to the above condition a logical OR for additional heteroatom atomTypes (e.g., oxygen, sulfur) on an aromatic ring that contribute a lone pair to the aromaticity, once they're added to RMG
                     order = order + 1
