@@ -8,7 +8,7 @@ from rmgpy import settings
 from rmgpy.data.rmg import RMGDatabase
 from copy import copy
 from rmgpy.data.base import LogicOr
-from rmgpy.molecule import Group, ImplicitBenzeneError
+from rmgpy.molecule import Group, ImplicitBenzeneError, UnexpectedChargeError
 from rmgpy.molecule.atomtype import atomTypes
 from rmgpy.molecule.pathfinder import find_shortest_path
 
@@ -707,6 +707,20 @@ Matched group AdjList:
                    "\n\nBackbone Group Adjlist:\n" + backboneSample.label +'\n' if mergesNecessary and root is not backbone else '',
                    backboneSample.item.toAdjacencyList() if mergesNecessary and root is not backbone else '',
                    match.item.toAdjacencyList()))
+
+                except UnexpectedChargeError, e:
+                     nose.tools.assert_true(False, """In family {0}, a sample molecule made from node {1} returns an unexpectedly charged molecule:
+Sample molecule AdjList:
+{2}
+
+Origin Group AdjList:
+{3}{4}{5}""".format(family_name,
+                    entry.label,
+                    e.graph.toAdjacencyList(),
+                    entry.item.toAdjacencyList(),
+                    "\n\nBackbone Group Adjlist:\n" + backboneSample.label +'\n' if mergesNecessary and root is not backbone else '',
+                    backboneSample.item.toAdjacencyList() if mergesNecessary and root is not backbone else '')
+                    )
 
                 except ImplicitBenzeneError:
                     skipped.append(entryName)
