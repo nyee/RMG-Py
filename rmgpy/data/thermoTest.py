@@ -1205,11 +1205,9 @@ class TestMolecularManipulationInvolvedInThermoEstimation(unittest.TestCase):
         single_ring_submol_b.updateAtomTypes()
 
         expected_submol_a = Molecule().fromSMILES('C1=CC1')
-        expected_submol_a.deleteHydrogens()
         expected_submol_a.updateConnectivityValues()
 
         expected_submol_b = Molecule().fromSMILES('C1=CCCC1')
-        expected_submol_b.deleteHydrogens()
         expected_submol_b.updateConnectivityValues()
 
 
@@ -1237,13 +1235,9 @@ class TestMolecularManipulationInvolvedInThermoEstimation(unittest.TestCase):
         single_ring_submol_b.updateAtomTypes()
 
         expected_submol_a = Molecule().fromSMILES('C1=CC1')
-        # remove hydrogen
-        expected_submol_a.deleteHydrogens()
         expected_submol_a.updateConnectivityValues()
 
         expected_submol_b = Molecule().fromSMILES('C1=CC=CC1')
-        # remove hydrogen
-        expected_submol_b.deleteHydrogens()
         expected_submol_b.updateConnectivityValues()
 
         self.assertTrue(single_ring_submol_a.isIsomorphic(expected_submol_a))
@@ -1260,8 +1254,6 @@ class TestMolecularManipulationInvolvedInThermoEstimation(unittest.TestCase):
         saturated_ring_submol, alreadySaturated = saturateRingBonds(ring_submol)
 
         expected_saturated_ring_submol = Molecule().fromSMILES('C1CCC2C1C2')
-        # remove hydrogen
-        expected_saturated_ring_submol.deleteHydrogens()
         
         expected_saturated_ring_submol.updateConnectivityValues()
 
@@ -1285,8 +1277,6 @@ class TestMolecularManipulationInvolvedInThermoEstimation(unittest.TestCase):
         expected_spe = Species().fromSMILES('C1=CC=C2CCCCC2=C1')
         expected_spe.generateResonanceIsomers()
         expected_saturated_ring_submol = expected_spe.molecule[1]
-        # remove hydrogen
-        expected_saturated_ring_submol.deleteHydrogens()
         
         expected_saturated_ring_submol.updateConnectivityValues()
 
@@ -1310,8 +1300,6 @@ class TestMolecularManipulationInvolvedInThermoEstimation(unittest.TestCase):
         expected_spe = Species().fromSMILES('C1=CC=C2CCCCC2=C1')
         expected_spe.generateResonanceIsomers()
         expected_saturated_ring_submol = expected_spe.molecule[1]
-        # remove hydrogen
-        expected_saturated_ring_submol.deleteHydrogens()
         
         expected_saturated_ring_submol.updateConnectivityValues()
 

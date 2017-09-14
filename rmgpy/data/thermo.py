@@ -356,7 +356,7 @@ def convertRingToSubMolecule(ring):
             if bondedAtom in ring:
                 if not mol0.hasBond(atomsMapping[atom],atomsMapping[bondedAtom]):
                     mol0.addBond(Bond(atomsMapping[atom],atomsMapping[bondedAtom],order=bond.order))
-    
+
     mol0.updateMultiplicity()
     mol0.updateConnectivityValues()
     return mol0, atomsMapping
@@ -508,8 +508,13 @@ def splitBicyclicIntoSingleRings(bicyclic_submol):
     """
     SSSR = bicyclic_submol.getDeterministicSmallestSetOfSmallestRings()
 
-    return [convertRingToSubMolecule(SSSR[0])[0], 
-                convertRingToSubMolecule(SSSR[1])[0]]
+    submol1 = convertRingToSubMolecule(SSSR[0])[0]
+    submol1.saturateUnfilledValence()
+
+    submol2 = convertRingToSubMolecule(SSSR[1])[0]
+    submol2.saturateUnfilledValence()
+
+    return [submol1, submol2]
 
 def saturateRingBonds(ring_submol):
     """
@@ -533,7 +538,8 @@ def saturateRingBonds(ring_submol):
                     if bond.isBenzene():
                         bond_order = 1.5
                     mol0.addBond(Bond(atomsMapping[atom],atomsMapping[bondedAtom],order=bond_order))
-    
+
+    mol0.saturateUnfilledValence()
     mol0.updateAtomTypes()
     mol0.updateMultiplicity()
     mol0.updateConnectivityValues()
